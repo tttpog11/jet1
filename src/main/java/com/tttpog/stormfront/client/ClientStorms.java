@@ -10,7 +10,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.client.ICloudRenderHandler;
+import net.minecraft.client.CloudStatus;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.event.TickEvent;
@@ -30,8 +30,7 @@ public final class ClientStorms {
     /** Kept at 0 for now (rain comes in a later step); the cloud renderer reads it. */
     public static float localRain = 0f;
 
-    /** Does nothing: swapping it in stops the blocky vanilla clouds from being drawn. */
-    private static final ICloudRenderHandler NO_VANILLA_CLOUDS = (ticks, partial, poseStack, level, mc, cx, cy, cz) -> { };
+    private static Object lastLevel = null;
 
     private ClientStorms() {}
 
@@ -60,9 +59,13 @@ public final class ClientStorms {
         if (mc.level == null || mc.player == null || mc.isPaused()) return;
         clientTicks++;
 
-        var effects = mc.level.effects();
-        ICloudRenderHandler want = Config.REPLACE_VANILLA_CLOUDS.get() ? NO_VANILLA_CLOUDS : null;
-        if (effects.getCloudRenderHandler() != want) effects.setCloudRenderHandler(want);
+        // On joining a world, switch the blocky vanilla clouds off (our own cumulus replace them).
+        if (lastLevel != mc.level) {
+            lastLevel = mc.level;
+            if (Config.REPLACE_VANILLA_CLOUDS.get() && mc.options.cloudStatus().get() != CloudStatus.OFF) {
+                mc.options.cloudStatus().set(CloudStatus.OFF);
+            }
+        }
 
         if (mc.level.dimension() != Level.OVERWORLD) STORMS.clear();
         if (STORMS.isEmpty()) return;
