@@ -92,6 +92,7 @@ public final class CloudRenderer {
         ResourceLocation tex;
         float x, y, z, size, sizeY, rot, r, g, b, a, d2, squash = 1f;
         float u0, v0;
+        boolean flip;
         StormData storm;
     }
 
@@ -104,7 +105,7 @@ public final class CloudRenderer {
         Puff p = new Puff();
         p.group = (byte) group;
         p.kind = (byte) kind;
-        p.variant = (byte) r.nextInt(4);
+        p.variant = (byte) r.nextInt(8);
         p.u = u;
         p.v = v;
         p.y = y;
@@ -156,6 +157,17 @@ public final class CloudRenderer {
                 p.spin = (r.nextFloat() - 0.5f) * 0.002f;
             }
         }
+        for (int j = 0; j <= 15; j++) {                      // small lobes on the tower's rim
+            float hf = j / 15f;
+            for (int k = 0; k < cnt(4, detail); k++) {
+                float ang = r.nextFloat() * 6.2832f;
+                float rad = R * (0.27f - 0.07f * hf) * (0.9f + 0.25f * r.nextFloat());
+                Puff p = puff(m, r, TOWER, BILL, Mth.cos(ang) * rad + hf * 0.20f * R, Mth.sin(ang) * rad,
+                        hf * H + r.nextFloat() * 0.03f * H, R * (0.06f + 0.05f * r.nextFloat()),
+                        0.42f * (float) Math.pow(1 - hf, 1.3) + 0.10f * r.nextFloat(), 0.95f);
+                p.aux = hf;
+            }
+        }
         for (int k = 0; k < cnt(9, detail); k++) {          // overshooting top
             float ang = r.nextFloat() * 6.2832f;
             float rad = 0.10f * R * r.nextFloat();
@@ -164,45 +176,46 @@ public final class CloudRenderer {
             p.aux = 1f;
         }
 
-        // ---- anvil: layered squashed sheets blown downwind + thin cirrus fringe
+        // ---- anvil: a circular umbrella spreading all the way around the top of the updraft,
+        //      centred a little downwind, drooping and thinning toward its rim, with a cirrus fringe
         float ca = Mth.cos(0.30f), sa = Mth.sin(0.30f);
-        for (int i = 0; i < cnt(60, detail); i++) {
-            float tt = (float) Math.pow(r.nextFloat(), 0.8) * 1.55f;
-            float lat = (float) r.nextGaussian() * (0.16f + 0.20f * tt) * R;
-            float u = (tt * ca * R - 0.10f * R * r.nextFloat()) - lat * sa;
-            float v = tt * sa * R + lat * ca;
-            Puff p = layer(m, r, ANVIL, u, v, H + (r.nextFloat() - 0.5f) * 0.05f * H - 0.02f * H,
-                    R * (0.16f + 0.14f * r.nextFloat()) * (0.8f + 0.3f * tt), 0.30f,
-                    0.20f + 0.22f * r.nextFloat(), 0.85f);
-            p.aux = tt;
+        float cu = 0.28f * R * ca, cv = 0.28f * R * sa;
+        for (int i = 0; i < cnt(80, detail); i++) {
+            float edge = (float) Math.sqrt(r.nextFloat());               // uniform over the disc
+            float th = r.nextFloat() * 6.2832f;
+            float rr = edge * 1.15f * R;
+            Puff p = layer(m, r, ANVIL, cu + Mth.cos(th) * rr, cv + Mth.sin(th) * rr,
+                    H + (r.nextFloat() - 0.5f) * 0.03f * H - 0.05f * H * edge * edge,
+                    R * (0.13f + 0.10f * r.nextFloat()) * (1.1f - 0.4f * edge), 0.32f,
+                    0.26f + 0.22f * edge + 0.12f * r.nextFloat(), 0.90f - 0.35f * edge);
+            p.aux = edge;
         }
-        for (int i = 0; i < cnt(34, detail); i++) {
-            float tt = (float) Math.pow(r.nextFloat(), 0.85) * 1.5f;
-            float lat = (float) r.nextGaussian() * (0.14f + 0.18f * tt) * R;
-            float u = (tt * ca * R) - lat * sa;
-            float v = tt * sa * R + lat * ca;
-            Puff p = layer(m, r, ANVIL, u, v, H + 0.03f * H + r.nextFloat() * 0.03f * H,
-                    R * (0.09f + 0.07f * r.nextFloat()), 0.55f, 0.02f + 0.08f * r.nextFloat(), 0.92f);
-            p.aux = tt;
+        for (int i = 0; i < cnt(46, detail); i++) {                      // billowing top surface
+            float edge = (float) Math.sqrt(r.nextFloat()) * 0.85f;
+            float th = r.nextFloat() * 6.2832f;
+            float rr = edge * 1.15f * R;
+            Puff p = layer(m, r, ANVIL, cu + Mth.cos(th) * rr, cv + Mth.sin(th) * rr,
+                    H + 0.025f * H + r.nextFloat() * 0.03f * H - 0.04f * H * edge * edge,
+                    R * (0.08f + 0.07f * r.nextFloat()), 0.55f, 0.02f + 0.10f * edge, 0.92f);
+            p.aux = edge;
         }
-        for (int i = 0; i < cnt(12, detail); i++) {
-            float tt = 1.1f + r.nextFloat() * 0.9f;
-            float lat = (float) r.nextGaussian() * (0.25f + 0.25f * tt) * R;
-            float u = (tt * ca * R) - lat * sa;
-            float v = tt * sa * R + lat * ca;
-            Puff p = layer(m, r, ANVIL, u, v, H + 0.01f * H, R * (0.24f + 0.16f * r.nextFloat()), 0.18f, 0.05f, 0.30f);
-            p.aux = tt;
+        for (int i = 0; i < cnt(16, detail); i++) {                      // thin cirrus rim
+            float th = r.nextFloat() * 6.2832f;
+            float rr = (0.95f + 0.40f * r.nextFloat()) * R;
+            Puff p = layer(m, r, ANVIL, cu + Mth.cos(th) * rr, cv + Mth.sin(th) * rr,
+                    H - 0.05f * H, R * (0.22f + 0.14f * r.nextFloat()), 0.16f, 0.18f, 0.26f);
+            p.aux = 1f;
         }
 
-        // ---- mammatus under the anvil
-        for (int i = 0; i < cnt(30, detail); i++) {
-            float tt = r.nextFloat() * 1.3f;
-            float lat = (float) r.nextGaussian() * (0.16f + 0.16f * tt) * R;
-            float u = (tt * ca * R) - lat * sa;
-            float v = tt * sa * R + lat * ca;
-            Puff p = puff(m, r, MAMMA, BILL, u, v, H - 0.03f * H - r.nextFloat() * 0.05f * H,
-                    R * 0.04f * (0.7f + 0.6f * r.nextFloat()), 0.42f, 0.85f);
-            p.aux = tt;
+        // ---- mammatus pouches hanging under the umbrella
+        for (int i = 0; i < cnt(34, detail); i++) {
+            float edge = (float) Math.sqrt(r.nextFloat()) * 0.9f;
+            float th = r.nextFloat() * 6.2832f;
+            float rr = edge * 1.15f * R;
+            Puff p = puff(m, r, MAMMA, BILL, cu + Mth.cos(th) * rr, cv + Mth.sin(th) * rr,
+                    H - 0.05f * H * edge * edge - 0.035f * H - r.nextFloat() * 0.05f * H,
+                    R * 0.04f * (0.7f + 0.6f * r.nextFloat()), 0.40f, 0.85f);
+            p.aux = edge;
         }
 
         // ---- shelf cloud: layered arc on the gust front, lowest at its leading edge
@@ -400,7 +413,7 @@ public final class CloudRenderer {
                     if (x * look.x + y * look.y + z * look.z < -sz * 1.3f) continue;
 
                     float shade = clampf(0.30f * (1f - core) + 0.10f + rain * 0.35f, 0f, 1f);
-                    float cr = lerp(1f, 0.34f, shade), cg = lerp(1f, 0.36f, shade), cb = lerp(1f, 0.40f, shade);
+                    float cr = lerp(0.98f, 0.40f, shade), cg = lerp(0.99f, 0.43f, shade), cb = lerp(1f, 0.50f, shade);
                     float wf = warm * (1f - shade);
                     cg *= 1f - 0.07f * wf;
                     cb *= 1f - 0.18f * wf;
@@ -414,9 +427,10 @@ public final class CloudRenderer {
                     Item it = new Item();
                     it.kind = BILL;
                     it.tex = PUFF;
-                    int variant = (int) (hash(cx, cz, 500 + i) * 4f) & 3;
+                    int variant = (int) (hash(cx, cz, 500 + i) * 8f) & 7;
                     it.u0 = (variant & 1) * 0.5f;
-                    it.v0 = (variant >> 1) * 0.5f;
+                    it.v0 = ((variant >> 1) & 1) * 0.5f;
+                    it.flip = ((variant >> 2) & 1) == 1;
                     it.x = x;
                     it.y = y;
                     it.z = z;
@@ -530,6 +544,7 @@ public final class CloudRenderer {
                 it.tex = PUFF;
                 it.u0 = (p.variant & 1) * 0.5f;
                 it.v0 = ((p.variant >> 1) & 1) * 0.5f;
+                it.flip = ((p.variant >> 2) & 1) == 1;
             }
             float d2 = x * x + y * y + z * z;
             float dist = (float) Math.sqrt(d2);
@@ -539,7 +554,7 @@ public final class CloudRenderer {
 
             // colour
             float sh = clampf(p.shade + 0.08f * ClientStorms.localRain, 0f, 1f);
-            float cr = lerp(1.00f, 0.30f, sh), cg = lerp(1.00f, 0.32f, sh), cb = lerp(1.00f, 0.36f, sh);
+            float cr = lerp(0.97f, 0.22f, sh), cg = lerp(0.98f, 0.26f, sh), cb = lerp(1.00f, 0.34f, sh);
             if (hailTint && p.group == PRECIP) {
                 cr *= 0.88f;
                 cg *= 0.96f;
@@ -602,6 +617,7 @@ public final class CloudRenderer {
                 d.tex = PUFF;
                 d.u0 = (i & 1) * 0.5f;
                 d.v0 = ((i >> 1) & 1) * 0.5f;
+                d.flip = ((i >> 2) & 1) == 1;
                 d.x = (float) (s.torX - camX) + Mth.cos(ang) * rad;
                 d.z = (float) (s.torZ - camZ) + Mth.sin(ang) * rad;
                 d.y = s.torY + size * 0.45f + (i % 3) * rr * 0.35f - (float) camY;
@@ -663,7 +679,7 @@ public final class CloudRenderer {
                     float ax = (rightX * c + upX * s) * it.size, ay = (rightY * c + upY * s) * it.size, az = (rightZ * c + upZ * s) * it.size;
                     float k = it.size * it.squash;
                     float bx = (-rightX * s + upX * c) * k, by = (-rightY * s + upY * c) * k, bz = (-rightZ * s + upZ * c) * k;
-                    quad(bb, mat, it.x, it.y, it.z, ax, ay, az, bx, by, bz, it.u0, it.v0, 0.5f, it.r, it.g, it.b, it.a);
+                    quad(bb, mat, it.x, it.y, it.z, ax, ay, az, bx, by, bz, it.flip ? it.u0 + 0.5f : it.u0, it.v0, it.flip ? -0.5f : 0.5f, it.r, it.g, it.b, it.a);
                 }
                 case VERT -> {
                     float len = (float) Math.sqrt(it.x * it.x + it.z * it.z);
@@ -690,11 +706,12 @@ public final class CloudRenderer {
                              float ax, float ay, float az, float bx, float by, float bz,
                              float u0, float v0, float span,
                              float r, float g, float b, float a) {
-        float u1 = u0 + span, v1 = v0 + span;
+        float u1 = u0 + span, v1 = v0 + Math.abs(span);
+        float vv0 = v0;
         bb.vertex(m, cx - ax - bx, cy - ay - by, cz - az - bz).uv(u0, v1).color(r, g, b, a).endVertex();
         bb.vertex(m, cx + ax - bx, cy + ay - by, cz + az - bz).uv(u1, v1).color(r, g, b, a).endVertex();
         bb.vertex(m, cx + ax + bx, cy + ay + by, cz + az + bz).uv(u1, v0).color(r, g, b, a).endVertex();
-        bb.vertex(m, cx - ax + bx, cy - ay + by, cz - az + bz).uv(u0, v0).color(r, g, b, a).endVertex();
+        bb.vertex(m, cx - ax + bx, cy - ay + by, cz - az + bz).uv(u0, vv0).color(r, g, b, a).endVertex();
     }
 
     /** Condensation funnel: a tapered, kinked, rotating tube (plus a wider faint halo shell). */
@@ -802,61 +819,71 @@ public final class CloudRenderer {
         return t;
     }
 
+    private static float fbm(float x, float y, int seed, int octaves) {
+        float sum = 0f, amp = 0.5f, norm = 0f;
+        for (int o = 0; o < octaves; o++) {
+            sum += amp * vnoise(x, y, seed + o * 17, 4096, 4096);
+            norm += amp;
+            x *= 2.03f;
+            y *= 2.03f;
+            amp *= 0.5f;
+        }
+        return sum / norm;
+    }
+
     /**
-     * 2x2 atlas of lumpy, lit cumulus sprites (each 128x128). A height-field built from overlapping
-     * dome lobes gives the cauliflower outline; its slope is lit from the upper left for soft shading
-     * that is bright on top and grey underneath.
+     * 2x2 atlas of cloud sprites (each 256x256). Density comes from a domain-warped "billow" noise
+     * (rounded cauliflower bumps) with turbulent, ragged edges and a flattened bottom. Shading is a
+     * cheap self-shadow: each pixel marches toward the sun through its own density, so lit tops, grey
+     * undersides and dark creases appear. All of this is baked once at startup, so it costs nothing per frame.
      */
     private static DynamicTexture makeCumulusAtlas() {
         final int T = 256, N = T * 2;
         NativeImage img = new NativeImage(NativeImage.Format.RGBA, N, N, false);
-        float[] hgt = new float[T * T];
+        float[] dens = new float[T * T];
         for (int variant = 0; variant < 4; variant++) {
-            Random rnd = new Random(7919L * (variant + 3));
-            int lobes = 9 + rnd.nextInt(5);
-            float[] lx = new float[lobes], ly = new float[lobes], lr = new float[lobes], lh = new float[lobes];
-            for (int i = 0; i < lobes; i++) {
-                float ang = rnd.nextFloat() * 6.2832f;
-                float d = 0.42f * (float) Math.sqrt(rnd.nextFloat());
-                lx[i] = 0.5f + Mth.cos(ang) * d;
-                ly[i] = 0.55f + Mth.sin(ang) * d * 0.8f - 0.04f;      // slightly flat-bottomed
-                lr[i] = 0.13f + 0.17f * rnd.nextFloat();
-                lh[i] = 0.7f + 0.5f * rnd.nextFloat();
-            }
+            int seed = 101 + variant * 37;
             for (int y = 0; y < T; y++) {
                 for (int x = 0; x < T; x++) {
-                    float fx = x / (float) T, fy = y / (float) T;
-                    float h = 0f;
-                    for (int i = 0; i < lobes; i++) {
-                        float dx = fx - lx[i], dy = fy - ly[i];
-                        float q = 1f - (dx * dx + dy * dy) / (lr[i] * lr[i]);
-                        if (q > 0f) h = Math.max(h, (float) Math.sqrt(q) * lh[i]);
-                    }
-                    float n = 0.6f * vnoise(x * 0.045f, y * 0.045f, 21 + variant, 64, 64)
-                            + 0.4f * vnoise(x * 0.11f, y * 0.11f, 33 + variant, 64, 64);
-                    if (h > 0f) h += (n - 0.5f) * 0.18f;
-                    hgt[y * T + x] = h;
+                    float nx = (x + 0.5f) / T, ny = (y + 0.5f) / T;
+                    float cx = (nx - 0.5f) * 2f, cy = (ny - 0.5f) * 2f;
+                    float wx = fbm(nx * 3f + 5f, ny * 3f, seed, 3) - 0.5f;
+                    float wy = fbm(nx * 3f, ny * 3f + 9f, seed + 5, 3) - 0.5f;
+                    float px = cx + wx * 0.55f, py = cy + wy * 0.55f;
+                    float rr = (float) Math.sqrt(px * px + py * py);
+                    if (py > 0.25f) rr *= 1f + (py - 0.25f) * 1.5f;               // flat-ish bottom
+                    float base = 1f - rr / 0.86f;
+                    float billow = 1f - Math.abs(2f * fbm(nx * 5f, ny * 5f, seed + 11, 4) - 1f);
+                    float fine = fbm(nx * 16f, ny * 16f, seed + 23, 3) - 0.5f;
+                    float d = base * 1.15f + (billow - 0.55f) * 0.62f + fine * 0.34f;
+                    float cxr = (float) Math.sqrt(cx * cx + cy * cy);
+                    d *= 1f - smoothstep(0.80f, 1.0f, cxr);                       // never touch the sprite border
+                    dens[y * T + x] = clampf(d, 0f, 1f);
                 }
             }
+            int ox0 = (variant & 1) * T, oy0 = (variant >> 1) * T;
             for (int y = 0; y < T; y++) {
                 for (int x = 0; x < T; x++) {
-                    float h = hgt[y * T + x];
-                    float hl = hgt[y * T + Math.max(0, x - 1)], hr = hgt[y * T + Math.min(T - 1, x + 1)];
-                    float hu = hgt[Math.max(0, y - 1) * T + x], hd = hgt[Math.min(T - 1, y + 1) * T + x];
-                    float gx = (hr - hl) * 12f, gy = (hd - hu) * 12f;          // slope
-                    float inv = 1f / (float) Math.sqrt(gx * gx + gy * gy + 1f);
-                    float nx = -gx * inv, ny = -gy * inv, nz = inv;
-                    float diff = nx * -0.35f + ny * -0.65f + nz * 0.67f;      // light from upper left, toward viewer
-                    float lit = clampf(0.50f + 0.62f * diff, 0f, 1f);
-                    float fy = y / (float) T;
-                    lit *= 0.78f + 0.22f * (1f - fy);                          // greyer underside
-                    lit = 0.38f + 0.62f * lit;
-                    float cx = (x - (T - 1) * 0.5f) / (T * 0.5f), cy = (y - (T - 1) * 0.5f) / (T * 0.5f);
-                    float rr = (float) Math.sqrt(cx * cx + cy * cy);
-                    float edge = 1f - smoothstep(0.82f, 1.0f, rr);             // never touch the sprite border
-                    float a = smoothstep(0.03f, 0.30f, h) * edge;
-                    int ox = (variant & 1) * T, oy = (variant >> 1) * T;
-                    img.setPixelRGBA(ox + x, oy + y, abgr(lit * 0.98f, lit * 0.99f, lit, a));
+                    float d = dens[y * T + x];
+                    float a = smoothstep(0.04f, 0.42f, d);
+                    float lit = 1f;
+                    if (a > 0.004f) {
+                        float acc = 0f;                                           // march toward the sun (upper left)
+                        float sx = x, sy = y;
+                        for (int k = 1; k <= 14; k++) {
+                            sx -= 3.2f;
+                            sy -= 6.0f / 2.0f * 1.0f;
+                            int ix = (int) sx, iy = (int) sy;
+                            if (ix < 0 || iy < 0 || ix >= T || iy >= T) break;
+                            acc += dens[iy * T + ix];
+                        }
+                        lit = (float) Math.exp(-acc * 0.16f);
+                    }
+                    float shade = 0.40f + 0.60f * lit;
+                    shade *= 0.80f + 0.20f * (1f - y / (float) T);                // greyer toward the base
+                    shade += 0.10f * (1f - smoothstep(0.0f, 0.35f, d));           // bright, thin edges (silver lining)
+                    float cr = shade * 0.965f, cg = shade * 0.985f, cb = shade;
+                    img.setPixelRGBA(ox0 + x, oy0 + y, abgr(cr, cg, cb, a));
                 }
             }
         }
