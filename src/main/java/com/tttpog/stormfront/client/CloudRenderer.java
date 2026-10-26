@@ -15,7 +15,6 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -34,9 +33,10 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * Draws every cloud feature of a supercell out of a few hundred soft sprites:
+ * Draws every cloud feature of a supercell out of a few hundred shaded cumulus sprites:
  * cumulonimbus tower, anvil + mammatus, shelf cloud, rotating wall cloud, flanking line,
- * precipitation curtains, and the tornado funnel + debris cloud.
+ * precipitation curtains, and the tornado funnel + debris cloud. Also draws a drifting field of
+ * ordinary fair-weather cumulus to replace the blocky vanilla clouds.
  *
  * Far geometry is drawn right after the sky with an extended far-plane (so storms 3+ km away are
  * visible; terrain then draws over it). Anything within NEAR_DIST is drawn later, depth-tested, so it
@@ -47,12 +47,12 @@ public final class CloudRenderer {
     // groups
     private static final int BASE = 0, TOWER = 1, ANVIL = 2, MAMMA = 3, SHELF = 4, WALL = 5, FLANK = 6, PRECIP = 7;
     // kinds
-    private static final int BILL = 0, PLATE = 1, VERT = 2, FUNNEL = 3;
+    private static final int BILL = 0, VERT = 2, FUNNEL = 3;
 
-    private static final float H = 135f;             // base -> anvil height
+    private static final float H = 150f;             // base -> anvil height
     private static final float NEAR_DIST = 650f;
 
-    private static final ResourceLocation PUFF = new ResourceLocation("stormfront", "dynamic/puff");
+    private static final ResourceLocation PUFF = new ResourceLocation("stormfront", "dynamic/cumulus");
     private static final ResourceLocation STREAK = new ResourceLocation("stormfront", "dynamic/streak");
     private static final ResourceLocation RAIN = new ResourceLocation("stormfront", "dynamic/rain");
     private static boolean texReady = false;
@@ -72,8 +72,8 @@ public final class CloudRenderer {
     // ---------------------------------------------------------------------------------------
 
     private static final class Puff {
-        byte group, kind;
-        float u, v, y, size, shade, rot, spin, phase, aux, alpha;
+        byte group, kind, variant;
+        float u, v, y, size, shade, rot, spin, phase, aux, alpha, squash = 1f;
     }
 
     private static final class Model {
@@ -90,7 +90,8 @@ public final class CloudRenderer {
     private static final class Item {
         int kind;
         ResourceLocation tex;
-        float x, y, z, size, sizeY, rot, r, g, b, a, d2;
+        float x, y, z, size, sizeY, rot, r, g, b, a, d2, squash = 1f;
+        float u0, v0;
         StormData storm;
     }
 
@@ -98,17 +99,30 @@ public final class CloudRenderer {
         return Math.max(1, Math.round(n * detail));
     }
 
-    private static Puff puff(Model m, int group, int kind, float u, float v, float y, float size, float shade, float alpha) {
+    private static Puff puff(Model m, Random r, int group, int kind, float u, float v, float y,
+                             float size, float shade, float alpha) {
         Puff p = new Puff();
         p.group = (byte) group;
         p.kind = (byte) kind;
+        p.variant = (byte) r.nextInt(4);
         p.u = u;
         p.v = v;
         p.y = y;
         p.size = size;
         p.shade = shade;
         p.alpha = alpha;
+        p.phase = r.nextFloat() * 6.28f;
+        p.rot = (r.nextFloat() - 0.5f) * 0.5f;
         m.puffs.add(p);
+        return p;
+    }
+
+    /** Flat-bottomed layer puff: wide and squashed, not rolled. */
+    private static Puff layer(Model m, Random r, int group, float u, float v, float y, float size,
+                              float squash, float shade, float alpha) {
+        Puff p = puff(m, r, group, BILL, u, v, y, size, shade, alpha);
+        p.squash = squash;
+        p.rot = (r.nextFloat() - 0.5f) * 0.08f;
         return p;
     }
 
@@ -119,117 +133,106 @@ public final class CloudRenderer {
         StormType t = s.type;
 
         // ---- dark flat base deck under the updraft
-        for (int i = 0; i < cnt(30, detail); i++) {
-            float u = clampf((float) r.nextGaussian() * 0.38f, -0.85f, 0.85f) * R;
-            float v = clampf((float) r.nextGaussian() * 0.38f, -0.85f, 0.85f) * R;
-            Puff p = puff(m, BASE, PLATE, u, v, -2f + r.nextFloat() * 5f, R * (0.22f + 0.20f * r.nextFloat()), 0.78f, 0.75f);
-            p.rot = r.nextFloat() * 6.28f;
+        for (int i = 0; i < cnt(26, detail); i++) {
+            float u = clampf((float) r.nextGaussian() * 0.34f, -0.8f, 0.8f) * R;
+            float v = clampf((float) r.nextGaussian() * 0.34f, -0.8f, 0.8f) * R;
+            layer(m, r, BASE, u, v, 4f + r.nextFloat() * 8f, R * (0.20f + 0.16f * r.nextFloat()), 0.42f, 0.62f, 0.85f);
         }
 
-        // ---- updraft tower, leaning downwind with height
-        for (int j = 0; j <= 13; j++) {
-            float hf = j / 13f;
-            int n = cnt(6, detail);
+        // ---- updraft tower, leaning downwind with height, cauliflower lobes
+        for (int j = 0; j <= 15; j++) {
+            float hf = j / 15f;
+            int n = cnt(7, detail);
             for (int k = 0; k < n; k++) {
                 float ang = r.nextFloat() * 6.2832f;
-                float rad = R * (0.34f - 0.10f * hf) * (0.25f + 0.75f * (float) Math.sqrt(r.nextFloat()));
-                float u = Mth.cos(ang) * rad + hf * 0.22f * R;
+                float rad = R * (0.30f - 0.08f * hf) * (0.25f + 0.75f * (float) Math.sqrt(r.nextFloat()));
+                float u = Mth.cos(ang) * rad + hf * 0.20f * R;
                 float v = Mth.sin(ang) * rad;
                 float sizeMul = 0.9f + 0.3f * Mth.sin(hf * 3.1416f);
-                Puff p = puff(m, TOWER, BILL, u, v, hf * H + r.nextFloat() * 0.03f * H,
-                        R * (0.17f + 0.08f * r.nextFloat()) * sizeMul, 0.62f * (float) Math.pow(1 - hf, 1.2) + 0.03f * r.nextFloat(), 0.95f);
+                Puff p = puff(m, r, TOWER, BILL, u, v, hf * H + r.nextFloat() * 0.03f * H,
+                        R * (0.15f + 0.07f * r.nextFloat()) * sizeMul,
+                        0.50f * (float) Math.pow(1 - hf, 1.3) + 0.02f * r.nextFloat(), 0.97f);
                 p.aux = hf;
-                p.rot = r.nextFloat() * 6.28f;
-                p.spin = (r.nextFloat() - 0.5f) * 0.004f;
-                p.phase = r.nextFloat() * 6.28f;
+                p.spin = (r.nextFloat() - 0.5f) * 0.002f;
             }
         }
-        for (int k = 0; k < cnt(8, detail); k++) {          // cauliflower overshooting top
+        for (int k = 0; k < cnt(9, detail); k++) {          // overshooting top
             float ang = r.nextFloat() * 6.2832f;
-            float rad = 0.12f * R * r.nextFloat();
-            Puff p = puff(m, TOWER, BILL, Mth.cos(ang) * rad + 0.22f * R, Mth.sin(ang) * rad,
-                    H + 0.02f * H + r.nextFloat() * 0.06f * H, R * (0.08f + 0.05f * r.nextFloat()), 0.0f, 0.98f);
+            float rad = 0.10f * R * r.nextFloat();
+            Puff p = puff(m, r, TOWER, BILL, Mth.cos(ang) * rad + 0.20f * R, Mth.sin(ang) * rad,
+                    H + 0.01f * H + r.nextFloat() * 0.07f * H, R * (0.07f + 0.05f * r.nextFloat()), 0.0f, 0.98f);
             p.aux = 1f;
-            p.phase = r.nextFloat() * 6.28f;
-            p.rot = r.nextFloat() * 6.28f;
         }
 
-        // ---- anvil: flat plates + textured top + thin cirrus fringe, blown downwind
+        // ---- anvil: layered squashed sheets blown downwind + thin cirrus fringe
         float ca = Mth.cos(0.30f), sa = Mth.sin(0.30f);
-        for (int i = 0; i < cnt(70, detail); i++) {
-            float tt = (float) Math.pow(r.nextFloat(), 0.75) * 2.3f;
-            float lat = (float) r.nextGaussian() * (0.22f + 0.28f * tt) * R;
-            float u = (tt * ca * R - 0.15f * R * r.nextFloat()) - lat * sa;
+        for (int i = 0; i < cnt(60, detail); i++) {
+            float tt = (float) Math.pow(r.nextFloat(), 0.8) * 1.55f;
+            float lat = (float) r.nextGaussian() * (0.16f + 0.20f * tt) * R;
+            float u = (tt * ca * R - 0.10f * R * r.nextFloat()) - lat * sa;
             float v = tt * sa * R + lat * ca;
-            Puff p = puff(m, ANVIL, PLATE, u, v, H + (r.nextFloat() - 0.5f) * 0.05f * H - 0.02f * H,
-                    R * (0.20f + 0.20f * r.nextFloat()) * (0.8f + 0.3f * tt), 0.22f + 0.2f * r.nextFloat(), 0.8f);
+            Puff p = layer(m, r, ANVIL, u, v, H + (r.nextFloat() - 0.5f) * 0.05f * H - 0.02f * H,
+                    R * (0.16f + 0.14f * r.nextFloat()) * (0.8f + 0.3f * tt), 0.30f,
+                    0.20f + 0.22f * r.nextFloat(), 0.85f);
             p.aux = tt;
-            p.rot = r.nextFloat() * 6.28f;
         }
-        for (int i = 0; i < cnt(45, detail); i++) {
-            float tt = (float) Math.pow(r.nextFloat(), 0.8) * 2.2f;
-            float lat = (float) r.nextGaussian() * (0.20f + 0.26f * tt) * R;
+        for (int i = 0; i < cnt(34, detail); i++) {
+            float tt = (float) Math.pow(r.nextFloat(), 0.85) * 1.5f;
+            float lat = (float) r.nextGaussian() * (0.14f + 0.18f * tt) * R;
             float u = (tt * ca * R) - lat * sa;
             float v = tt * sa * R + lat * ca;
-            Puff p = puff(m, ANVIL, BILL, u, v, H + 0.03f * H + r.nextFloat() * 0.025f * H,
-                    R * (0.10f + 0.08f * r.nextFloat()), 0.02f + 0.1f * r.nextFloat(), 0.9f);
+            Puff p = layer(m, r, ANVIL, u, v, H + 0.03f * H + r.nextFloat() * 0.03f * H,
+                    R * (0.09f + 0.07f * r.nextFloat()), 0.55f, 0.02f + 0.08f * r.nextFloat(), 0.92f);
             p.aux = tt;
-            p.rot = r.nextFloat() * 6.28f;
         }
-        for (int i = 0; i < cnt(14, detail); i++) {
-            float tt = 1.4f + r.nextFloat() * 1.3f;
-            float lat = (float) r.nextGaussian() * (0.3f + 0.3f * tt) * R;
+        for (int i = 0; i < cnt(12, detail); i++) {
+            float tt = 1.1f + r.nextFloat() * 0.9f;
+            float lat = (float) r.nextGaussian() * (0.25f + 0.25f * tt) * R;
             float u = (tt * ca * R) - lat * sa;
             float v = tt * sa * R + lat * ca;
-            Puff p = puff(m, ANVIL, PLATE, u, v, H + 0.01f * H, R * (0.28f + 0.2f * r.nextFloat()), 0.05f, 0.35f);
+            Puff p = layer(m, r, ANVIL, u, v, H + 0.01f * H, R * (0.24f + 0.16f * r.nextFloat()), 0.18f, 0.05f, 0.30f);
             p.aux = tt;
-            p.rot = r.nextFloat() * 6.28f;
         }
 
         // ---- mammatus under the anvil
-        for (int i = 0; i < cnt(34, detail); i++) {
-            float tt = r.nextFloat() * 1.8f;
-            float lat = (float) r.nextGaussian() * (0.20f + 0.2f * tt) * R;
+        for (int i = 0; i < cnt(30, detail); i++) {
+            float tt = r.nextFloat() * 1.3f;
+            float lat = (float) r.nextGaussian() * (0.16f + 0.16f * tt) * R;
             float u = (tt * ca * R) - lat * sa;
             float v = tt * sa * R + lat * ca;
-            Puff p = puff(m, MAMMA, BILL, u, v, H - 0.025f * H - r.nextFloat() * 0.05f * H,
-                    R * 0.045f * (0.7f + 0.6f * r.nextFloat()), 0.45f, 0.8f);
+            Puff p = puff(m, r, MAMMA, BILL, u, v, H - 0.03f * H - r.nextFloat() * 0.05f * H,
+                    R * 0.04f * (0.7f + 0.6f * r.nextFloat()), 0.42f, 0.85f);
             p.aux = tt;
-            p.rot = r.nextFloat() * 6.28f;
         }
 
         // ---- shelf cloud: layered arc on the gust front, lowest at its leading edge
-        for (int i = 0; i < cnt(64, detail); i++) {
+        for (int i = 0; i < cnt(60, detail); i++) {
             float ang = (r.nextFloat() - 0.5f) * 2f * 1.15f;
             float depth = r.nextFloat();
             float rad = R * (1.0f + 0.14f * depth);
-            Puff p = puff(m, SHELF, BILL, Mth.cos(ang) * rad, Mth.sin(ang) * rad,
+            layer(m, r, SHELF, Mth.cos(ang) * rad, Mth.sin(ang) * rad,
                     -2f - 14f * depth * (0.6f + 0.4f * r.nextFloat()),
-                    R * (0.10f + 0.06f * r.nextFloat()), 0.35f + 0.3f * depth, 0.9f);
-            p.rot = ang + 1.5708f + (r.nextFloat() - 0.5f) * 0.4f;
-            p.phase = r.nextFloat() * 6.28f;
+                    R * (0.10f + 0.05f * r.nextFloat()), 0.50f, 0.34f + 0.3f * depth, 0.92f);
         }
-        for (int i = 0; i < cnt(14, detail); i++) {
+        for (int i = 0; i < cnt(12, detail); i++) {
             float ang = (r.nextFloat() - 0.5f) * 2f * 1.1f;
             float rad = R * (0.9f + 0.1f * r.nextFloat());
-            Puff p = puff(m, SHELF, PLATE, Mth.cos(ang) * rad, Mth.sin(ang) * rad, 5f + r.nextFloat() * 6f,
-                    R * 0.2f, 0.30f, 0.8f);
-            p.rot = r.nextFloat() * 6.28f;
+            layer(m, r, SHELF, Mth.cos(ang) * rad, Mth.sin(ang) * rad, 8f + r.nextFloat() * 8f,
+                    R * 0.16f, 0.35f, 0.28f, 0.85f);
         }
 
-        // ---- wall cloud (positions relative to the wall-cloud centre; aux = how far it hangs)
+        // ---- wall cloud (positions relative to its centre; aux = how far it hangs)
         for (int i = 0; i < cnt(18, detail); i++) {
             float ang = r.nextFloat() * 6.2832f;
             float rad = 0.07f * R * (0.2f + 0.8f * (float) Math.sqrt(r.nextFloat()));
             float f = r.nextFloat();
-            Puff p = puff(m, WALL, BILL, Mth.cos(ang) * rad, Mth.sin(ang) * rad, 0f,
+            Puff p = puff(m, r, WALL, BILL, Mth.cos(ang) * rad, Mth.sin(ang) * rad, 0f,
                     R * (0.045f + 0.025f * r.nextFloat()) * (1.0f - 0.3f * f),
-                    0.55f + 0.35f * r.nextFloat(), 0.92f);
+                    0.50f + 0.30f * r.nextFloat(), 0.94f);
             p.aux = f;
-            p.rot = r.nextFloat() * 6.28f;
         }
         {
-            Puff p = puff(m, WALL, PLATE, 0, 0, 0, R * 0.095f, 0.80f, 0.95f);
+            Puff p = layer(m, r, WALL, 0, 0, 0, R * 0.095f, 0.55f, 0.70f, 0.95f);
             p.aux = 1f;
         }
 
@@ -241,12 +244,10 @@ public final class CloudRenderer {
             for (int lvl = 0; lvl < 4; lvl++) {
                 for (int q = 0; q < cnt(4, detail); q++) {
                     float ox = (r.nextFloat() - 0.5f) * 0.08f * R, oz = (r.nextFloat() - 0.5f) * 0.08f * R;
-                    Puff p = puff(m, FLANK, BILL, bu + ox, bv + oz, lvl / 3f * ht + 4f,
+                    Puff p = puff(m, r, FLANK, BILL, bu + ox, bv + oz, lvl / 3f * ht + 4f,
                             R * (0.085f - 0.01f * k) * (1f + 0.3f * r.nextFloat()),
-                            0.30f + 0.3f * (1f - lvl / 3f), 0.92f);
+                            0.26f + 0.3f * (1f - lvl / 3f), 0.94f);
                     p.aux = k;
-                    p.rot = r.nextFloat() * 6.28f;
-                    p.phase = r.nextFloat() * 6.28f;
                 }
             }
         }
@@ -261,11 +262,10 @@ public final class CloudRenderer {
         }
         float pu = t.puFrac * R, pv = t.pvFrac * R;
         for (int i = 0; i < cnt(n, detail); i++) {
-            Puff p = puff(m, PRECIP, VERT,
+            puff(m, r, PRECIP, VERT,
                     pu + (float) r.nextGaussian() * t.coreA * R * 0.40f,
                     pv + (float) r.nextGaussian() * t.coreB * R * 0.40f,
                     0f, R * (wmin + (wmax - wmin) * r.nextFloat()), shade, alpha);
-            p.phase = r.nextFloat() * 6.28f;
         }
         return m;
     }
@@ -300,10 +300,12 @@ public final class CloudRenderer {
 
     private static void farPass(RenderLevelStageEvent e) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || !ClientStorms.hasStorms()) return;
+        if (mc.level == null) return;
+        boolean ambient = Config.AMBIENT_CLOUDS.get();
+        if (!ambient && !ClientStorms.hasStorms()) return;
+
         float pt = e.getPartialTick();
         List<StormData> storms = ClientStorms.current(pt);
-        if (storms.isEmpty()) return;
         ensureTextures();
 
         Camera cam = e.getCamera();
@@ -321,19 +323,18 @@ public final class CloudRenderer {
         upZ = up.z;
         Vector3f look = cam.getLookVector();
 
-        // nearest N storms
-        storms.sort((a, b) -> Double.compare(d2(a, cp), d2(b, cp)));
-        int max = Math.min(storms.size(), Config.MAX_RENDERED_STORMS.get());
-
         // sun lighting
         float tod = mc.level.getTimeOfDay(pt);
         float sunH = Mth.cos(tod * 6.2831853f);
         float bright = 0.10f + 0.90f * clampf(sunH * 1.6f + 0.30f, 0f, 1f);
-        bright *= 1f - 0.22f * mc.level.getRainLevel(pt);
+        bright *= 1f - 0.18f * mc.level.getRainLevel(pt);
         float warm = clampf(1f - Math.abs(sunH) * 3.2f, 0f, 1f) * (sunH > -0.3f ? 1f : 0f);
 
-        List<Item> all = new ArrayList<>(1200);
-        float detail = Config.CLOUD_DETAIL.get().floatValue();
+        List<Item> all = new ArrayList<>(1500);
+        float detail = Config.CLOUD_DETAIL.get().floatValue() * 1.6f;
+
+        storms.sort((a, b) -> Double.compare(d2(a, cp), d2(b, cp)));
+        int max = Math.min(storms.size(), Config.MAX_RENDERED_STORMS.get());
         for (int i = 0; i < max; i++) {
             StormData s = storms.get(i);
             Model m = MODELS.get(s.id);
@@ -344,6 +345,7 @@ public final class CloudRenderer {
             collect(s, m, all, look, bright, warm, mc);
         }
         if (MODELS.size() > 16) MODELS.clear();
+        if (ambient) collectAmbient(all, look, bright, warm, detail);
         if (all.isEmpty()) return;
 
         all.sort((a, b) -> Float.compare(b.d2, a.d2));   // back to front
@@ -360,6 +362,76 @@ public final class CloudRenderer {
 
     private static double d2(StormData s, Vec3 c) {
         return (s.x - c.x) * (s.x - c.x) + (s.z - c.z) * (s.z - c.z);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // ambient fair-weather cumulus (replaces the blocky vanilla clouds)
+    // ---------------------------------------------------------------------------------------
+
+    private static void collectAmbient(List<Item> out, Vector3f look, float bright, float warm, float detail) {
+        final float CELL = 430f;
+        final int RAD = 6;
+        float cover = Config.AMBIENT_COVER.get().floatValue();
+        double drift = timeNow * 0.012;                 // clouds drift east
+        int ccx = Mth.floor((camX - drift) / CELL), ccz = Mth.floor(camZ / CELL);
+        float rain = ClientStorms.localRain;
+
+        for (int dx = -RAD; dx <= RAD; dx++) {
+            for (int dz = -RAD; dz <= RAD; dz++) {
+                int cx = ccx + dx, cz = ccz + dz;
+                if (hash(cx, cz, 101) > cover) continue;
+                double baseX = cx * CELL + hash(cx, cz, 102) * CELL + drift;
+                double baseZ = cz * CELL + hash(cx, cz, 103) * CELL;
+                float baseY = 215f + hash(cx, cz, 104) * 30f;
+                float scale = 0.7f + hash(cx, cz, 106) * 0.9f;
+                int n = Math.max(3, Math.round((4 + hash(cx, cz, 105) * 6f) * detail));
+                for (int i = 0; i < n; i++) {
+                    float a = hash(cx, cz, 200 + i) * 6.2832f;
+                    float d = hash(cx, cz, 300 + i) * 75f * scale;
+                    float sz = (30f + hash(cx, cz, 400 + i) * 42f) * scale;
+                    float core = 1f - d / (75f * scale);                 // 1 in the middle of the cluster
+                    float x = (float) (baseX + Mth.cos(a) * d - camX);
+                    float z = (float) (baseZ + Mth.sin(a) * d - camZ);
+                    float y = baseY + sz * 0.45f + core * sz * 0.65f - (float) camY;
+
+                    float dist2 = x * x + y * y + z * z;
+                    float dist = (float) Math.sqrt(dist2);
+                    if (dist > 3600f) continue;
+                    if (x * look.x + y * look.y + z * look.z < -sz * 1.3f) continue;
+
+                    float shade = clampf(0.30f * (1f - core) + 0.10f + rain * 0.35f, 0f, 1f);
+                    float cr = lerp(1f, 0.34f, shade), cg = lerp(1f, 0.36f, shade), cb = lerp(1f, 0.40f, shade);
+                    float wf = warm * (1f - shade);
+                    cg *= 1f - 0.07f * wf;
+                    cb *= 1f - 0.18f * wf;
+                    float hz = smoothstep(1800f, 3600f, dist) * 0.55f;
+                    cr = lerp(cr, 0.70f, hz);
+                    cg = lerp(cg, 0.76f, hz);
+                    cb = lerp(cb, 0.86f, hz);
+                    float a2 = (1f - smoothstep(2600f, 3600f, dist)) * smoothstep(sz * 0.15f, sz * 1.1f, dist) * 0.96f;
+                    if (a2 < 0.02f) continue;
+
+                    Item it = new Item();
+                    it.kind = BILL;
+                    it.tex = PUFF;
+                    int variant = (int) (hash(cx, cz, 500 + i) * 4f) & 3;
+                    it.u0 = (variant & 1) * 0.5f;
+                    it.v0 = (variant >> 1) * 0.5f;
+                    it.x = x;
+                    it.y = y;
+                    it.z = z;
+                    it.size = sz;
+                    it.squash = 0.78f;
+                    it.rot = (hash(cx, cz, 600 + i) - 0.5f) * 0.12f;
+                    it.r = cr * bright;
+                    it.g = cg * bright;
+                    it.b = cb * bright;
+                    it.a = a2;
+                    it.d2 = dist2;
+                    out.add(it);
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -382,7 +454,7 @@ public final class CloudRenderer {
                 ground = mc.level.getHeight(Heightmap.Types.WORLD_SURFACE, gx, gz);
             }
         }
-        boolean hailTint = s.hail >= 1.0f;
+        boolean hailTint = s.hail >= 1.5f;
         float mamFactor = s.type == StormType.HP ? 1f : (s.type == StormType.CLASSIC ? 0.8f : 0.4f);
 
         for (Puff p : m.puffs) {
@@ -445,7 +517,6 @@ public final class CloudRenderer {
             float size = p.size * sizeMul;
 
             Item it = new Item();
-            it.storm = null;
             float y;
             if (p.kind == VERT) {
                 float top = base - 4f, bot = Math.max(ground - 1f, 0f);
@@ -453,11 +524,12 @@ public final class CloudRenderer {
                 y = (top + bot) * 0.5f - (float) camY;
                 it.sizeY = (top - bot) * 0.5f;
                 it.tex = RAIN;
-                float sway = Mth.sin(timeNow * 0.02f + p.phase) * size * 0.1f;
-                x += sway;
+                x += Mth.sin(timeNow * 0.02f + p.phase) * size * 0.1f;
             } else {
                 y = yy - (float) camY;
                 it.tex = PUFF;
+                it.u0 = (p.variant & 1) * 0.5f;
+                it.v0 = ((p.variant >> 1) & 1) * 0.5f;
             }
             float d2 = x * x + y * y + z * z;
             float dist = (float) Math.sqrt(d2);
@@ -466,21 +538,21 @@ public final class CloudRenderer {
             if (dist > 9000f) continue;
 
             // colour
-            float sh = clampf(p.shade + 0.10f * ClientStorms.localRain, 0f, 1f);
-            float cr = lerp(1.00f, 0.26f, sh), cg = lerp(1.00f, 0.28f, sh), cb = lerp(1.00f, 0.32f, sh);
+            float sh = clampf(p.shade + 0.08f * ClientStorms.localRain, 0f, 1f);
+            float cr = lerp(1.00f, 0.30f, sh), cg = lerp(1.00f, 0.32f, sh), cb = lerp(1.00f, 0.36f, sh);
             if (hailTint && p.group == PRECIP) {
-                cr *= 0.78f;
-                cg *= 0.92f;
-                cb *= 0.82f;
+                cr *= 0.88f;
+                cg *= 0.96f;
+                cb *= 0.90f;
             }
             float wf = warm * (1f - 0.55f * sh);
-            cg *= 1f - 0.22f * wf;
-            cb *= 1f - 0.52f * wf;
+            cg *= 1f - 0.07f * wf;
+            cb *= 1f - 0.18f * wf;
             // distance haze, slightly bluer far away
             float hz = smoothstep(2500f, 8000f, dist) * 0.5f;
-            cr = lerp(cr, 0.66f, hz);
-            cg = lerp(cg, 0.72f, hz);
-            cb = lerp(cb, 0.80f, hz);
+            cr = lerp(cr, 0.70f, hz);
+            cg = lerp(cg, 0.76f, hz);
+            cb = lerp(cb, 0.86f, hz);
 
             float a = alpha * smoothstep(size * 0.15f, size * 1.15f, dist);
             if (a < 0.01f) continue;
@@ -490,6 +562,7 @@ public final class CloudRenderer {
             it.y = y;
             it.z = z;
             it.size = size;
+            it.squash = p.squash;
             it.rot = p.rot + timeNow * p.spin;
             it.r = cr * bright;
             it.g = cg * bright;
@@ -527,6 +600,8 @@ public final class CloudRenderer {
                 Item d = new Item();
                 d.kind = BILL;
                 d.tex = PUFF;
+                d.u0 = (i & 1) * 0.5f;
+                d.v0 = ((i >> 1) & 1) * 0.5f;
                 d.x = (float) (s.torX - camX) + Mth.cos(ang) * rad;
                 d.z = (float) (s.torZ - camZ) + Mth.sin(ang) * rad;
                 d.y = s.torY + size * 0.45f + (i % 3) * rr * 0.35f - (float) camY;
@@ -586,19 +661,15 @@ public final class CloudRenderer {
                 case BILL -> {
                     float c = Mth.cos(it.rot), s = Mth.sin(it.rot);
                     float ax = (rightX * c + upX * s) * it.size, ay = (rightY * c + upY * s) * it.size, az = (rightZ * c + upZ * s) * it.size;
-                    float bx = (-rightX * s + upX * c) * it.size, by = (-rightY * s + upY * c) * it.size, bz = (-rightZ * s + upZ * c) * it.size;
-                    quad(bb, mat, it.x, it.y, it.z, ax, ay, az, bx, by, bz, it.r, it.g, it.b, it.a);
-                }
-                case PLATE -> {
-                    float c = Mth.cos(it.rot), s = Mth.sin(it.rot);
-                    quad(bb, mat, it.x, it.y, it.z, c * it.size, 0, s * it.size, -s * it.size, 0, c * it.size,
-                            it.r, it.g, it.b, it.a);
+                    float k = it.size * it.squash;
+                    float bx = (-rightX * s + upX * c) * k, by = (-rightY * s + upY * c) * k, bz = (-rightZ * s + upZ * c) * k;
+                    quad(bb, mat, it.x, it.y, it.z, ax, ay, az, bx, by, bz, it.u0, it.v0, 0.5f, it.r, it.g, it.b, it.a);
                 }
                 case VERT -> {
                     float len = (float) Math.sqrt(it.x * it.x + it.z * it.z);
                     float hx = len < 1e-3f ? 1f : -it.z / len, hz = len < 1e-3f ? 0f : it.x / len;
                     quad(bb, mat, it.x, it.y, it.z, hx * it.size, 0, hz * it.size, 0, it.sizeY, 0,
-                            it.r, it.g, it.b, it.a);
+                            0f, 0f, 1f, it.r, it.g, it.b, it.a);
                 }
                 case FUNNEL -> funnel(bb, mat, it);
                 default -> { }
@@ -617,11 +688,13 @@ public final class CloudRenderer {
 
     private static void quad(BufferBuilder bb, Matrix4f m, float cx, float cy, float cz,
                              float ax, float ay, float az, float bx, float by, float bz,
+                             float u0, float v0, float span,
                              float r, float g, float b, float a) {
-        bb.vertex(m, cx - ax - bx, cy - ay - by, cz - az - bz).uv(0f, 1f).color(r, g, b, a).endVertex();
-        bb.vertex(m, cx + ax - bx, cy + ay - by, cz + az - bz).uv(1f, 1f).color(r, g, b, a).endVertex();
-        bb.vertex(m, cx + ax + bx, cy + ay + by, cz + az + bz).uv(1f, 0f).color(r, g, b, a).endVertex();
-        bb.vertex(m, cx - ax + bx, cy - ay + by, cz - az + bz).uv(0f, 0f).color(r, g, b, a).endVertex();
+        float u1 = u0 + span, v1 = v0 + span;
+        bb.vertex(m, cx - ax - bx, cy - ay - by, cz - az - bz).uv(u0, v1).color(r, g, b, a).endVertex();
+        bb.vertex(m, cx + ax - bx, cy + ay - by, cz + az - bz).uv(u1, v1).color(r, g, b, a).endVertex();
+        bb.vertex(m, cx + ax + bx, cy + ay + by, cz + az + bz).uv(u1, v0).color(r, g, b, a).endVertex();
+        bb.vertex(m, cx - ax + bx, cy - ay + by, cz - az + bz).uv(u0, v0).color(r, g, b, a).endVertex();
     }
 
     /** Condensation funnel: a tapered, kinked, rotating tube (plus a wider faint halo shell). */
@@ -656,7 +729,6 @@ public final class CloudRenderer {
             float alpha = (shell == 0 ? 0.90f : 0.26f) * s.fade * smoothstep(0.02f, 0.2f, s.torInt);
             for (int i = 0; i < RINGS; i++) {
                 float h0 = i / (float) RINGS, h1 = (i + 1) / (float) RINGS;
-                // dirtier / darker near the ground
                 float d0 = (1f - h0) * (1f - h0), d1 = (1f - h1) * (1f - h1);
                 float[] c0 = funnelColor(d0, bright), c1 = funnelColor(d1, bright);
                 for (int j = 0; j < SEGS; j++) {
@@ -691,7 +763,7 @@ public final class CloudRenderer {
     private static void ensureTextures() {
         if (texReady) return;
         Minecraft mc = Minecraft.getInstance();
-        mc.getTextureManager().register(PUFF, makePuff());
+        mc.getTextureManager().register(PUFF, makeCumulusAtlas());
         mc.getTextureManager().register(STREAK, makeStreak());
         mc.getTextureManager().register(RAIN, makeRain());
         texReady = true;
@@ -730,20 +802,62 @@ public final class CloudRenderer {
         return t;
     }
 
-    private static DynamicTexture makePuff() {
-        int N = 64;
+    /**
+     * 2x2 atlas of lumpy, lit cumulus sprites (each 128x128). A height-field built from overlapping
+     * dome lobes gives the cauliflower outline; its slope is lit from the upper left for soft shading
+     * that is bright on top and grey underneath.
+     */
+    private static DynamicTexture makeCumulusAtlas() {
+        final int T = 256, N = T * 2;
         NativeImage img = new NativeImage(NativeImage.Format.RGBA, N, N, false);
-        for (int y = 0; y < N; y++) {
-            for (int x = 0; x < N; x++) {
-                float dx = (x - 31.5f) / 32f, dy = (y - 31.5f) / 32f;
-                float r = (float) Math.sqrt(dx * dx + dy * dy);
-                float n1 = vnoise(x * 0.13f, y * 0.13f, 3, 64, 64);
-                float n2 = vnoise(x * 0.31f, y * 0.31f, 9, 64, 64);
-                float n = 0.65f * n1 + 0.35f * n2;
-                float edge = clampf(1f - r / (0.80f + 0.22f * n), 0f, 1f);
-                float a = smoothstep(0f, 0.65f, edge);
-                float lit = 0.80f + 0.20f * (-dy) + (n - 0.5f) * 0.22f;
-                img.setPixelRGBA(x, y, abgr(lit, lit, lit, a));
+        float[] hgt = new float[T * T];
+        for (int variant = 0; variant < 4; variant++) {
+            Random rnd = new Random(7919L * (variant + 3));
+            int lobes = 9 + rnd.nextInt(5);
+            float[] lx = new float[lobes], ly = new float[lobes], lr = new float[lobes], lh = new float[lobes];
+            for (int i = 0; i < lobes; i++) {
+                float ang = rnd.nextFloat() * 6.2832f;
+                float d = 0.42f * (float) Math.sqrt(rnd.nextFloat());
+                lx[i] = 0.5f + Mth.cos(ang) * d;
+                ly[i] = 0.55f + Mth.sin(ang) * d * 0.8f - 0.04f;      // slightly flat-bottomed
+                lr[i] = 0.13f + 0.17f * rnd.nextFloat();
+                lh[i] = 0.7f + 0.5f * rnd.nextFloat();
+            }
+            for (int y = 0; y < T; y++) {
+                for (int x = 0; x < T; x++) {
+                    float fx = x / (float) T, fy = y / (float) T;
+                    float h = 0f;
+                    for (int i = 0; i < lobes; i++) {
+                        float dx = fx - lx[i], dy = fy - ly[i];
+                        float q = 1f - (dx * dx + dy * dy) / (lr[i] * lr[i]);
+                        if (q > 0f) h = Math.max(h, (float) Math.sqrt(q) * lh[i]);
+                    }
+                    float n = 0.6f * vnoise(x * 0.045f, y * 0.045f, 21 + variant, 64, 64)
+                            + 0.4f * vnoise(x * 0.11f, y * 0.11f, 33 + variant, 64, 64);
+                    if (h > 0f) h += (n - 0.5f) * 0.18f;
+                    hgt[y * T + x] = h;
+                }
+            }
+            for (int y = 0; y < T; y++) {
+                for (int x = 0; x < T; x++) {
+                    float h = hgt[y * T + x];
+                    float hl = hgt[y * T + Math.max(0, x - 1)], hr = hgt[y * T + Math.min(T - 1, x + 1)];
+                    float hu = hgt[Math.max(0, y - 1) * T + x], hd = hgt[Math.min(T - 1, y + 1) * T + x];
+                    float gx = (hr - hl) * 12f, gy = (hd - hu) * 12f;          // slope
+                    float inv = 1f / (float) Math.sqrt(gx * gx + gy * gy + 1f);
+                    float nx = -gx * inv, ny = -gy * inv, nz = inv;
+                    float diff = nx * -0.35f + ny * -0.65f + nz * 0.67f;      // light from upper left, toward viewer
+                    float lit = clampf(0.50f + 0.62f * diff, 0f, 1f);
+                    float fy = y / (float) T;
+                    lit *= 0.78f + 0.22f * (1f - fy);                          // greyer underside
+                    lit = 0.38f + 0.62f * lit;
+                    float cx = (x - (T - 1) * 0.5f) / (T * 0.5f), cy = (y - (T - 1) * 0.5f) / (T * 0.5f);
+                    float rr = (float) Math.sqrt(cx * cx + cy * cy);
+                    float edge = 1f - smoothstep(0.82f, 1.0f, rr);             // never touch the sprite border
+                    float a = smoothstep(0.03f, 0.30f, h) * edge;
+                    int ox = (variant & 1) * T, oy = (variant >> 1) * T;
+                    img.setPixelRGBA(ox + x, oy + y, abgr(lit * 0.98f, lit * 0.99f, lit, a));
+                }
             }
         }
         return finish(img);
@@ -776,10 +890,5 @@ public final class CloudRenderer {
             }
         }
         return finish(img);
-    }
-
-    @SuppressWarnings("unused")
-    private static BlockPos unusedImport() {
-        return BlockPos.ZERO;
     }
 }

@@ -23,6 +23,9 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue CLOUD_DETAIL;
     public static final ForgeConfigSpec.IntValue MAX_RENDERED_STORMS;
     public static final ForgeConfigSpec.BooleanValue CAMERA_SHAKE;
+    public static final ForgeConfigSpec.BooleanValue REPLACE_VANILLA_CLOUDS;
+    public static final ForgeConfigSpec.BooleanValue AMBIENT_CLOUDS;
+    public static final ForgeConfigSpec.DoubleValue AMBIENT_COVER;
 
     static {
         ForgeConfigSpec.Builder c = new ForgeConfigSpec.Builder();
@@ -57,6 +60,10 @@ public final class Config {
         MAX_RENDERED_STORMS = k.comment("Only the nearest N storms are drawn.")
                 .defineInRange("maxRenderedStorms", 2, 1, 5);
         CAMERA_SHAKE = k.define("cameraShake", true);
+        REPLACE_VANILLA_CLOUDS = k.comment("Turn off the blocky vanilla clouds.").define("replaceVanillaClouds", true);
+        AMBIENT_CLOUDS = k.comment("Draw realistic drifting fair-weather cumulus.").define("ambientClouds", true);
+        AMBIENT_COVER = k.comment("Fraction of sky cells that hold a cloud (0.05 = sparse, 0.7 = overcast).")
+                .defineInRange("ambientCover", 0.40, 0.05, 0.9);
         CLIENT = k.build();
     }
 
