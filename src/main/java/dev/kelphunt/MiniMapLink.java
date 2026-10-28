@@ -33,7 +33,8 @@ public final class MiniMapLink {
         if (c.rough()) sb.append(", rough seabed");
         if (c.fresh()) sb.append(", new chunk");
         else if (c.old()) sb.append(", old chunk");
-        if (c.chunks() > 1) sb.append(", ").append(c.chunks()).append(" chunks");
+        if (c.spanX() > 1 || c.spanZ() > 1) sb.append(", ").append(c.spanX()).append("x").append(c.spanZ()).append(" chunk patch");
+        else if (c.chunks() > 1) sb.append(", ").append(c.chunks()).append(" chunks");
         return sb.toString();
     }
 

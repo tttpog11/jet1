@@ -111,10 +111,10 @@ public class KelpHuntClient implements ClientModInitializer {
         }
         try {
             java.nio.file.Path file = FabricLoader.getInstance().getGameDir().resolve("kelphunt-candidates.csv");
-            StringBuilder sb = new StringBuilder("score,x,y,z,chunks,grown_pct,old_chunk,new_chunk,above_water,rough_seabed\n");
+            StringBuilder sb = new StringBuilder("score,x,y,z,chunks,grown_pct,old_chunk,new_chunk,above_water,rough_seabed,patch_x,patch_z\n");
             for (Cluster c : KelpData.clusters) {
                 sb.append(c.score()).append(',').append(c.x()).append(',').append(c.y()).append(',').append(c.z()).append(',')
-                  .append(c.chunks()).append(',').append(c.grownPct()).append(',').append(c.old()).append(',').append(c.fresh()).append(',').append(c.above()).append(',').append(c.rough()).append('\n');
+                  .append(c.chunks()).append(',').append(c.grownPct()).append(',').append(c.old()).append(',').append(c.fresh()).append(',').append(c.above()).append(',').append(c.rough()).append(',').append(c.spanX()).append(',').append(c.spanZ()).append('\n');
             }
             java.nio.file.Files.writeString(file, sb.toString());
             say(src, "exported " + KelpData.clusters.size() + " spot(s) to kelphunt-candidates.csv in your game folder.");

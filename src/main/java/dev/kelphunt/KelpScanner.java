@@ -49,7 +49,7 @@ public final class KelpScanner {
     /** Skip chunks inside your own simulation distance: you are loading those yourself, so grown kelp there proves nothing. */
     public boolean skipNear = false;
     /** Also use seabed/above-water shape as extra evidence (cheap, vanilla heightmap data). */
-    public boolean terrain = true;
+    public boolean terrain = false;
     private int skippedNear;
     public int skippedNear() { return skippedNear; }
 
@@ -252,9 +252,26 @@ public final class KelpScanner {
             if (score < minWaypointScore) continue;
             // Centre on the strongest chunk so the waypoint lands on solid evidence.
             ChunkReport peak = members.stream().max(Comparator.comparingInt(ChunkReport::score)).orElseThrow();
-            out.add(new Cluster(peak.pos().getMiddleBlockX(), peak.avgY(), peak.pos().getMiddleBlockZ(),
+            // A player parked underground keeps a square of chunks ticking around them, so the middle of the
+            // strong patch points at them better than any single chunk does.
+            int bx = peak.pos().getMiddleBlockX(), bz = peak.pos().getMiddleBlockZ();
+            int spanX = 1, spanZ = 1;
+            double cutoff = Math.max(minWaypointScore, best * 0.5);
+            List<ChunkReport> strong = members.stream().filter(m -> m.score() >= cutoff).toList();
+            if (strong.size() >= 4) {
+                int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+                for (ChunkReport m : strong) {
+                    minX = Math.min(minX, m.pos().x); maxX = Math.max(maxX, m.pos().x);
+                    minZ = Math.min(minZ, m.pos().z); maxZ = Math.max(maxZ, m.pos().z);
+                }
+                bx = (minX + maxX) * 8 + 8;   // middle of the bounding box, in blocks
+                bz = (minZ + maxZ) * 8 + 8;
+                spanX = maxX - minX + 1;
+                spanZ = maxZ - minZ + 1;
+            }
+            out.add(new Cluster(bx, peak.avgY(), bz,
                 score, members.size(), peak.heads() >= MIN_HEADS ? (int) Math.round(peak.doneFraction() * 100) : -1,
-                peak.old(), peak.fresh(), peak.above() >= ABOVE_COLUMNS, peak.rough()));
+                peak.old(), peak.fresh(), peak.above() >= ABOVE_COLUMNS, peak.rough(), spanX, spanZ));
         }
         out.sort(Comparator.comparingInt(Cluster::score).reversed());
         return out.size() > MAX_CLUSTERS ? new ArrayList<>(out.subList(0, MAX_CLUSTERS)) : out;

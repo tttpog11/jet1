@@ -10,6 +10,11 @@ Needs: Fabric Loader 0.18+, Fabric API, Xaero's Minimap 26.6.0 and World Map 1.4
 With XaeroPlus installed, switch on its **Old Chunks** and **New Chunks** modules. Old chunks add +20 to a chunk's
 score; new chunks are scaled to 25% (they can't have been loaded for long). Longer loaded = stronger evidence.
 
+## Underground bases
+A base loads the chunks above it, so kelp over it keeps growing. The waypoint sits at the middle of the strong patch
+(a parked player keeps a square of chunks ticking around them) and the name shows the patch size, e.g. `21x21 chunk patch`.
+Y is the kelp/seabed height, not the base depth. Turn on `/kelphunt skipnear` so your own loading doesn't count.
+
 ## Extra evidence (terrain)
 Uses the chunk heightmaps your client already has, no block searching:
 - **above-water blocks**: 3+ columns of something solid above the sea surface in an ocean chunk (+15). Icebergs/snow are ignored.
@@ -21,7 +26,7 @@ Natural things (monuments, shipwrecks, ruins, islands) can trigger these too, so
 - `/kelphunt auto`           toggle rescanning every ~15 s while you fly around
 - `/kelphunt min <score>`    minimum score for a waypoint (default 10)
 - `/kelphunt skipnear`      toggle skipping chunks inside your own simulation distance
-- `/kelphunt terrain`       toggle the seabed / above-water evidence (on by default)
+- `/kelphunt terrain`       toggle the seabed / above-water evidence (off by default; only helps with surface builds)
 - `/kelphunt status`        show what is detected and the current settings
 - `/kelphunt export`        write candidates (with coordinates) to `kelphunt-candidates.csv` in the game folder
 - `/kelphunt clear`          remove results and Kelp Hunt waypoints
