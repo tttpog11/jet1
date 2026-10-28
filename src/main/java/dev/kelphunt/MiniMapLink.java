@@ -25,6 +25,16 @@ public final class MiniMapLink {
         return "Low";
     }
 
+    /** e.g. "KH Low - 84% grown, old chunk, 3 chunks": the label plus the reasons behind the score. */
+    private static String nameFor(Cluster c) {
+        StringBuilder sb = new StringBuilder(PREFIX).append(labelFor(c.score()))
+            .append(" - ").append(c.grownPct()).append("% grown");
+        if (c.fresh()) sb.append(", new chunk");
+        else if (c.old()) sb.append(", old chunk");
+        if (c.chunks() > 1) sb.append(", ").append(c.chunks()).append(" chunks");
+        return sb.toString();
+    }
+
     private static WaypointColor colorFor(int score) {
         if (score >= 70) return WaypointColor.RED;
         if (score >= 35) return WaypointColor.GOLD;
@@ -46,7 +56,7 @@ public final class MiniMapLink {
             removeOurs(set);
             int n = 0;
             for (Cluster c : clusters) {
-                set.add(new Waypoint(c.x(), c.y(), c.z(), PREFIX + labelFor(c.score()), "K", colorFor(c.score())));
+                set.add(new Waypoint(c.x(), c.y(), c.z(), nameFor(c), "K", colorFor(c.score())));
                 n++;
             }
             ms.getWorldManagerIO().saveWorld(world);
