@@ -38,6 +38,10 @@ public final class KelpScanner {
 
     /** Waypoints are only made for clusters scoring at least this. */
     public int minWaypointScore = 10;
+    /** Skip chunks inside your own simulation distance: you are loading those yourself, so grown kelp there proves nothing. */
+    public boolean skipNear = false;
+    private int skippedNear;
+    public int skippedNear() { return skippedNear; }
 
     private final ArrayDeque<ChunkPos> queue = new ArrayDeque<>();
     /** Everything measured so far. Kept across scans so the baseline grows as you explore. */
@@ -60,6 +64,7 @@ public final class KelpScanner {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
         queue.clear();
+        skippedNear = 0;
         ChunkPos c = mc.player.chunkPosition();
         for (int dx = -radiusChunks; dx <= radiusChunks; dx++) {
             for (int dz = -radiusChunks; dz <= radiusChunks; dz++) {
@@ -96,6 +101,15 @@ public final class KelpScanner {
     }
 
     private ChunkReport scanChunk(ClientLevel level, LevelChunk chunk, ChunkPos pos) {
+        Minecraft mcNow = Minecraft.getInstance();
+        if (skipNear && mcNow.player != null) {
+            ChunkPos me = mcNow.player.chunkPosition();
+            int sim = mcNow.options.simulationDistance().get();
+            if (Math.max(Math.abs(pos.x - me.x), Math.abs(pos.z - me.z)) <= sim) {
+                skippedNear++;
+                return null;
+            }
+        }
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         int top = level.getSeaLevel();
         p.set(pos.getMiddleBlockX(), top - 8, pos.getMiddleBlockZ());

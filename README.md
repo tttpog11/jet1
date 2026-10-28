@@ -11,9 +11,12 @@ With XaeroPlus installed, switch on its **Old Chunks** and **New Chunks** module
 score; new chunks are scaled to 25% (they can't have been loaded for long). Longer loaded = stronger evidence.
 
 ## Commands
-- `/kelphunt scan [radius]`  scan loaded chunks (default 12, max 32). Waypoints are named `KH Low` (score under 35), `KH Confident` (35-69) or `KH High` (70+), followed by why, e.g. `KH Low - 84% grown, old chunk, 3 chunks`.
+- `/kelphunt scan [radius]`  scan loaded chunks (default 12, max 32). Waypoints are named `KH Low` (score under 35), `KH Confident` (35-69) or `KH High` (70+), followed by why, e.g. `KH Low - 84 pct grown, old chunk, 3 chunks`.
 - `/kelphunt auto`           toggle rescanning every ~15 s while you fly around
 - `/kelphunt min <score>`    minimum score for a waypoint (default 10)
+- `/kelphunt skipnear`      toggle skipping chunks inside your own simulation distance
+- `/kelphunt status`        show what is detected and the current settings
+- `/kelphunt export`        write candidates (with coordinates) to `kelphunt-candidates.csv` in the game folder
 - `/kelphunt clear`          remove results and Kelp Hunt waypoints
 
 ## Build

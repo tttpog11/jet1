@@ -50,6 +50,18 @@ public class KelpHuntClient implements ClientModInitializer {
                             say(ctx.getSource(), "waypoints will be made for scores " + SCANNER.minWaypointScore + "+ (applies on the next scan)");
                             return 1;
                         })))
+                .then(ClientCommandManager.literal("skipnear")
+                    .executes(ctx -> {
+                        SCANNER.skipNear = !SCANNER.skipNear;
+                        say(ctx.getSource(), SCANNER.skipNear
+                            ? "skipping chunks inside your own simulation distance (you load those yourself). Applies on the next scan."
+                            : "scoring every loaded chunk, including ones you are loading yourself.");
+                        return 1;
+                    }))
+                .then(ClientCommandManager.literal("status")
+                    .executes(ctx -> status(ctx.getSource())))
+                .then(ClientCommandManager.literal("export")
+                    .executes(ctx -> export(ctx.getSource())))
                 .then(ClientCommandManager.literal("clear")
                     .executes(ctx -> {
                         SCANNER.clearAll();
@@ -70,6 +82,40 @@ public class KelpHuntClient implements ClientModInitializer {
             + "Results appear on the World Map and as waypoints.");
         if (!hasMiniMap && !hasWorldMap) say(src, "Xaero's Minimap/World Map not found, so there is nothing to draw on.");
         return 1;
+    }
+
+    private static int status(FabricClientCommandSource src) {
+        FabricLoader l = FabricLoader.getInstance();
+        say(src, "Minimap " + (hasMiniMap ? "yes" : "no") + ", World Map " + (hasWorldMap ? "yes" : "no")
+            + ", XaeroPlus " + (l.isModLoaded("xaeroplus") ? "yes" : "no") + ". "
+            + SCANNER.measuredChunks() + " ocean chunks measured, " + KelpData.clusters.size() + " candidate spot(s), "
+            + KelpData.positives.size() + " highlighted chunk(s). Waypoint cutoff " + SCANNER.minWaypointScore
+            + ", skip-near " + (SCANNER.skipNear ? "on (" + SCANNER.skippedNear() + " skipped last scan)" : "off")
+            + ", auto " + (auto ? "on" : "off") + ".");
+        return 1;
+    }
+
+    /** Writes candidates, with coordinates, to a file instead of chat. */
+    private static int export(FabricClientCommandSource src) {
+        if (KelpData.clusters.isEmpty()) {
+            say(src, "nothing to export yet. Run /kelphunt scan first.");
+            return 0;
+        }
+        try {
+            java.nio.file.Path file = FabricLoader.getInstance().getGameDir().resolve("kelphunt-candidates.csv");
+            StringBuilder sb = new StringBuilder("score,x,y,z,chunks,grown_pct,old_chunk,new_chunk\n");
+            for (Cluster c : KelpData.clusters) {
+                sb.append(c.score()).append(',').append(c.x()).append(',').append(c.y()).append(',').append(c.z()).append(',')
+                  .append(c.chunks()).append(',').append(c.grownPct()).append(',').append(c.old()).append(',').append(c.fresh()).append('\n');
+            }
+            java.nio.file.Files.writeString(file, sb.toString());
+            say(src, "exported " + KelpData.clusters.size() + " spot(s) to kelphunt-candidates.csv in your game folder.");
+            return 1;
+        } catch (Exception e) {
+            LOGGER.warn("Export failed", e);
+            say(src, "export failed, see the game log.");
+            return 0;
+        }
     }
 
     private static int toggleAuto(FabricClientCommandSource src) {

@@ -25,10 +25,10 @@ public final class MiniMapLink {
         return "Low";
     }
 
-    /** e.g. "KH Low - 84% grown, old chunk, 3 chunks": the label plus the reasons behind the score. */
+    /** e.g. "KH Low - 84 pct grown, old chunk, 3 chunks": the label plus the reasons behind the score. */
     private static String nameFor(Cluster c) {
         StringBuilder sb = new StringBuilder(PREFIX).append(labelFor(c.score()))
-            .append(" - ").append(c.grownPct()).append("% grown");
+            .append(" - ").append(c.grownPct()).append(" pct grown");
         if (c.fresh()) sb.append(", new chunk");
         else if (c.old()) sb.append(", old chunk");
         if (c.chunks() > 1) sb.append(", ").append(c.chunks()).append(" chunks");
