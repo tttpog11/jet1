@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BiomeTags;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
@@ -12,6 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -29,6 +31,12 @@ import java.util.Set;
 public final class KelpScanner {
     private static final int CHUNKS_PER_TICK = 6;
     private static final int MIN_HEADS = 4;
+    /** Columns sticking out of the water before a chunk counts as having above-water blocks. */
+    private static final int ABOVE_COLUMNS = 3;
+    /** Abrupt (3+ block) seabed steps, out of 480 neighbouring column pairs, before the seabed counts as rough. */
+    private static final int ROUGH_STEPS = 40;
+    private static final int ABOVE_BONUS = 15;
+    private static final int ROUGH_BONUS = 10;
     private static final int MAX_CLUSTERS = 20;
     private static final boolean HAS_XAEROPLUS = FabricLoader.getInstance().isModLoaded("xaeroplus");
     /** Added to the kelp score for a chunk XaeroPlus lists as old. */
@@ -40,6 +48,8 @@ public final class KelpScanner {
     public int minWaypointScore = 10;
     /** Skip chunks inside your own simulation distance: you are loading those yourself, so grown kelp there proves nothing. */
     public boolean skipNear = false;
+    /** Also use seabed/above-water shape as extra evidence (cheap, vanilla heightmap data). */
+    public boolean terrain = true;
     private int skippedNear;
     public int skippedNear() { return skippedNear; }
 
@@ -134,13 +144,48 @@ public final class KelpScanner {
                 }
             }
         }
-        if (heads < MIN_HEADS) return null;
+
+        int above = 0;
+        boolean rough = false;
+        int floorMean = top - 20;
+        if (terrain) {
+            int[] floor = new int[256];
+            long fsum = 0;
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    int fh = chunk.getHeight(Heightmap.Types.OCEAN_FLOOR, x, z);
+                    floor[x * 16 + z] = fh;
+                    fsum += fh;
+                    int sh = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
+                    if (sh > top + 1) {
+                        p.set(pos.getMinBlockX() + x, sh - 1, pos.getMinBlockZ() + z);
+                        BlockState s = chunk.getBlockState(p);
+                        // icebergs and snow are natural, don't count them
+                        if (!s.is(BlockTags.ICE) && !s.is(Blocks.SNOW) && !s.is(Blocks.SNOW_BLOCK) && !s.is(Blocks.POWDER_SNOW)) above++;
+                    }
+                }
+            }
+            floorMean = (int) (fsum / 256);
+            int steps = 0;
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    int h = floor[x * 16 + z];
+                    if (x < 15 && Math.abs(h - floor[(x + 1) * 16 + z]) >= 3) steps++;
+                    if (z < 15 && Math.abs(h - floor[x * 16 + z + 1]) >= 3) steps++;
+                }
+            }
+            rough = steps >= ROUGH_STEPS;
+        }
+        boolean hasKelp = heads >= MIN_HEADS;
+        boolean anomaly = above >= ABOVE_COLUMNS || rough;
+        if (!hasKelp && !anomaly) return null;
         boolean old = false, fresh = false;
         if (HAS_XAEROPLUS) {
             old = XaeroPlusLink.isOld(pos.x, pos.z, level.dimension());
             fresh = XaeroPlusLink.isNew(pos.x, pos.z, level.dimension());
         }
-        return new ChunkReport(pos, heads, (double) done / heads, (int) (ySum / heads), 0, old, fresh);
+        return new ChunkReport(pos, hasKelp ? heads : 0, hasKelp ? (double) done / heads : 0,
+            hasKelp ? (int) (ySum / heads) : floorMean, 0, old, fresh, above, rough);
     }
 
     /**
@@ -149,18 +194,28 @@ public final class KelpScanner {
      */
     private void finish() {
         finishedFlag = true;
-        if (reports.size() < 5) {
+        if (reports.isEmpty()) {
             KelpData.clear();
             return;
         }
-        double mean = reports.values().stream().mapToDouble(ChunkReport::doneFraction).average().orElse(0);
-        double var = reports.values().stream().mapToDouble(r -> Math.pow(r.doneFraction() - mean, 2)).average().orElse(0);
+        // Kelp baseline uses only chunks with enough kelp to judge.
+        List<ChunkReport> kelpChunks = reports.values().stream().filter(r -> r.heads() >= MIN_HEADS).toList();
+        boolean baseline = kelpChunks.size() >= 5;
+        double mean = kelpChunks.stream().mapToDouble(ChunkReport::doneFraction).average().orElse(0);
+        double var = kelpChunks.stream().mapToDouble(r -> Math.pow(r.doneFraction() - mean, 2)).average().orElse(0);
         double sd = Math.max(Math.sqrt(var), 0.05); // floor stops a uniform ocean from exploding
 
         Map<Long, ChunkReport> positives = new HashMap<>();
         for (Map.Entry<ChunkPos, ChunkReport> e : reports.entrySet()) {
-            double z = (e.getValue().doneFraction() - mean) / sd;
-            int score = (int) Math.round(Math.max(0, Math.min(100, z * 40)));
+            ChunkReport r = e.getValue();
+            int score = 0;
+            if (baseline && r.heads() >= MIN_HEADS) {
+                double z = (r.doneFraction() - mean) / sd;
+                score = (int) Math.round(Math.max(0, Math.min(100, z * 40)));
+            }
+            if (r.above() >= ABOVE_COLUMNS) score += ABOVE_BONUS;
+            if (r.rough()) score += ROUGH_BONUS;
+            score = Math.min(100, score);
             if (e.getValue().fresh()) score = (int) Math.round(score * NEW_CHUNK_FACTOR);
             else if (e.getValue().old()) score = Math.min(100, score + OLD_CHUNK_BONUS);
             ChunkReport scored = e.getValue().withScore(score);
@@ -198,7 +253,8 @@ public final class KelpScanner {
             // Centre on the strongest chunk so the waypoint lands on solid evidence.
             ChunkReport peak = members.stream().max(Comparator.comparingInt(ChunkReport::score)).orElseThrow();
             out.add(new Cluster(peak.pos().getMiddleBlockX(), peak.avgY(), peak.pos().getMiddleBlockZ(),
-                score, members.size(), (int) Math.round(peak.doneFraction() * 100), peak.old(), peak.fresh()));
+                score, members.size(), peak.heads() >= MIN_HEADS ? (int) Math.round(peak.doneFraction() * 100) : -1,
+                peak.old(), peak.fresh(), peak.above() >= ABOVE_COLUMNS, peak.rough()));
         }
         out.sort(Comparator.comparingInt(Cluster::score).reversed());
         return out.size() > MAX_CLUSTERS ? new ArrayList<>(out.subList(0, MAX_CLUSTERS)) : out;

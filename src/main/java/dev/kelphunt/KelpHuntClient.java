@@ -58,6 +58,14 @@ public class KelpHuntClient implements ClientModInitializer {
                             : "scoring every loaded chunk, including ones you are loading yourself.");
                         return 1;
                     }))
+                .then(ClientCommandManager.literal("terrain")
+                    .executes(ctx -> {
+                        SCANNER.terrain = !SCANNER.terrain;
+                        say(ctx.getSource(), SCANNER.terrain
+                            ? "seabed and above-water shape now count as extra evidence. Applies on the next scan."
+                            : "kelp growth only. Applies on the next scan.");
+                        return 1;
+                    }))
                 .then(ClientCommandManager.literal("status")
                     .executes(ctx -> status(ctx.getSource())))
                 .then(ClientCommandManager.literal("export")
@@ -90,7 +98,7 @@ public class KelpHuntClient implements ClientModInitializer {
             + ", XaeroPlus " + (l.isModLoaded("xaeroplus") ? "yes" : "no") + ". "
             + SCANNER.measuredChunks() + " ocean chunks measured, " + KelpData.clusters.size() + " candidate spot(s), "
             + KelpData.positives.size() + " highlighted chunk(s). Waypoint cutoff " + SCANNER.minWaypointScore
-            + ", skip-near " + (SCANNER.skipNear ? "on (" + SCANNER.skippedNear() + " skipped last scan)" : "off")
+            + ", terrain " + (SCANNER.terrain ? "on" : "off") + ", skip-near " + (SCANNER.skipNear ? "on (" + SCANNER.skippedNear() + " skipped last scan)" : "off")
             + ", auto " + (auto ? "on" : "off") + ".");
         return 1;
     }
@@ -103,10 +111,10 @@ public class KelpHuntClient implements ClientModInitializer {
         }
         try {
             java.nio.file.Path file = FabricLoader.getInstance().getGameDir().resolve("kelphunt-candidates.csv");
-            StringBuilder sb = new StringBuilder("score,x,y,z,chunks,grown_pct,old_chunk,new_chunk\n");
+            StringBuilder sb = new StringBuilder("score,x,y,z,chunks,grown_pct,old_chunk,new_chunk,above_water,rough_seabed\n");
             for (Cluster c : KelpData.clusters) {
                 sb.append(c.score()).append(',').append(c.x()).append(',').append(c.y()).append(',').append(c.z()).append(',')
-                  .append(c.chunks()).append(',').append(c.grownPct()).append(',').append(c.old()).append(',').append(c.fresh()).append('\n');
+                  .append(c.chunks()).append(',').append(c.grownPct()).append(',').append(c.old()).append(',').append(c.fresh()).append(',').append(c.above()).append(',').append(c.rough()).append('\n');
             }
             java.nio.file.Files.writeString(file, sb.toString());
             say(src, "exported " + KelpData.clusters.size() + " spot(s) to kelphunt-candidates.csv in your game folder.");

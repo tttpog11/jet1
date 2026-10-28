@@ -60,8 +60,15 @@ public class KelpHighlighter extends ChunkHighlighter {
     private static Component tip(int chunkX, int chunkZ) {
         ChunkReport r = get(chunkX, chunkZ);
         if (r == null) return null;
-        return Component.literal(String.format("Kelp Hunt: %s confidence, score %d (%.0f%% of kelp fully grown%s)",
-            r.score() >= 70 ? "high" : r.score() >= 35 ? "medium" : "low", r.score(), r.doneFraction() * 100, r.old() ? ", old chunk" : r.fresh() ? ", new chunk" : ""));
+        StringBuilder sb = new StringBuilder("Kelp Hunt: ")
+            .append(r.score() >= 70 ? "high" : r.score() >= 35 ? "medium" : "low")
+            .append(" confidence, score ").append(r.score());
+        if (r.heads() > 0) sb.append(String.format(" (%.0f%% of kelp fully grown", r.doneFraction() * 100));
+        else sb.append(" (too little kelp to judge");
+        if (r.old()) sb.append(", old chunk"); else if (r.fresh()) sb.append(", new chunk");
+        if (r.above() >= 3) sb.append(", above-water blocks");
+        if (r.rough()) sb.append(", rough seabed");
+        return Component.literal(sb.append(")").toString());
     }
 
     @Override
