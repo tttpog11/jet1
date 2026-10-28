@@ -44,7 +44,6 @@ public final class KelpScanner {
     private final Map<ChunkPos, ChunkReport> reports = new HashMap<>();
     private boolean running;
     private boolean finishedFlag;
-    private double oceanMean, oceanSd;
 
     public boolean isRunning() { return running; }
     public int remaining() { return queue.size(); }
@@ -143,8 +142,6 @@ public final class KelpScanner {
         double mean = reports.values().stream().mapToDouble(ChunkReport::doneFraction).average().orElse(0);
         double var = reports.values().stream().mapToDouble(r -> Math.pow(r.doneFraction() - mean, 2)).average().orElse(0);
         double sd = Math.max(Math.sqrt(var), 0.05); // floor stops a uniform ocean from exploding
-        oceanMean = mean;
-        oceanSd = sd;
 
         Map<Long, ChunkReport> positives = new HashMap<>();
         for (Map.Entry<ChunkPos, ChunkReport> e : reports.entrySet()) {
@@ -157,22 +154,6 @@ public final class KelpScanner {
             if (score > 0) positives.put(e.getKey().toLong(), scored);
         }
         KelpData.publish(positives, cluster(positives));
-    }
-
-    private String explain(ChunkReport peak, int chunks, int best, int score) {
-        double z = (peak.doneFraction() - oceanMean) / oceanSd;
-        int base = (int) Math.round(Math.max(0, Math.min(100, z * 40)));
-        StringBuilder sb = new StringBuilder();
-        String label = score >= 70 ? "High" : score >= 35 ? "Confident" : "Low";
-        sb.append(label).append(" confidence, score ").append(score).append(". ");
-        sb.append(String.format("In the strongest chunk %.0f%% of its %d kelp tops are fully grown, vs %.0f%% on average across the %d ocean chunks measured (%.1f standard deviations above, base score %d). ",
-            peak.doneFraction() * 100, peak.heads(), oceanMean * 100, reports.size(), z, base));
-        sb.append("Kelp only reaches full growth while its chunk is loaded, so more grown kelp means the area has been loaded longer. ");
-        if (peak.fresh()) sb.append("XaeroPlus lists it as a NEW chunk, so the score was cut to 25%. ");
-        else if (peak.old()) sb.append("XaeroPlus lists it as an OLD chunk: +" + OLD_CHUNK_BONUS + ". ");
-        else if (HAS_XAEROPLUS) sb.append("XaeroPlus has no old/new data for it (no adjustment). ");
-        if (chunks > 1) sb.append(chunks).append(" neighbouring chunks also stand out (+").append(Math.min(10, chunks - 1)).append("). ");
-        return sb.toString().trim();
     }
 
     /** Flood-fills neighbouring positive chunks into clusters; one waypoint per cluster. */
@@ -203,7 +184,7 @@ public final class KelpScanner {
             // Centre on the strongest chunk so the waypoint lands on solid evidence.
             ChunkReport peak = members.stream().max(Comparator.comparingInt(ChunkReport::score)).orElseThrow();
             out.add(new Cluster(peak.pos().getMiddleBlockX(), peak.avgY(), peak.pos().getMiddleBlockZ(),
-                score, members.size(), explain(peak, members.size(), best, score)));
+                score, members.size(), (int) Math.round(peak.doneFraction() * 100), peak.old(), peak.fresh()));
         }
         out.sort(Comparator.comparingInt(Cluster::score).reversed());
         return out.size() > MAX_CLUSTERS ? new ArrayList<>(out.subList(0, MAX_CLUSTERS)) : out;

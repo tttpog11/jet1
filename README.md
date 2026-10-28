@@ -14,7 +14,6 @@ score; new chunks are scaled to 25% (they can't have been loaded for long). Long
 - `/kelphunt scan [radius]`  scan loaded chunks (default 12, max 32). Waypoints are named `KH Low` (score under 35), `KH Confident` (35-69) or `KH High` (70+), followed by why, e.g. `KH Low - 84% grown, old chunk, 3 chunks`.
 - `/kelphunt auto`           toggle rescanning every ~15 s while you fly around
 - `/kelphunt min <score>`    minimum score for a waypoint (default 10)
-- `/kelphunt why`           explains the score of the candidate nearest to you
 - `/kelphunt clear`          remove results and Kelp Hunt waypoints
 
 ## Build

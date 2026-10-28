@@ -50,8 +50,6 @@ public class KelpHuntClient implements ClientModInitializer {
                             say(ctx.getSource(), "waypoints will be made for scores " + SCANNER.minWaypointScore + "+ (applies on the next scan)");
                             return 1;
                         })))
-                .then(ClientCommandManager.literal("why")
-                    .executes(ctx -> why(ctx.getSource())))
                 .then(ClientCommandManager.literal("clear")
                     .executes(ctx -> {
                         SCANNER.clearAll();
@@ -71,23 +69,6 @@ public class KelpHuntClient implements ClientModInitializer {
         say(src, "scanning " + radius + " chunks out. Only chunks your client has already loaded are read. "
             + "Results appear on the World Map and as waypoints.");
         if (!hasMiniMap && !hasWorldMap) say(src, "Xaero's Minimap/World Map not found, so there is nothing to draw on.");
-        return 1;
-    }
-
-    /** Explains the score of the candidate spot nearest to you. Never prints coordinates. */
-    private static int why(FabricClientCommandSource src) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || KelpData.clusters.isEmpty()) {
-            say(src, "no candidate spots yet. Run /kelphunt scan first.");
-            return 0;
-        }
-        Cluster nearest = null;
-        double bestD = Double.MAX_VALUE;
-        for (Cluster c : KelpData.clusters) {
-            double d = mc.player.distanceToSqr(c.x(), c.y(), c.z());
-            if (d < bestD) { bestD = d; nearest = c; }
-        }
-        say(src, "nearest candidate (about " + (int) Math.sqrt(bestD) + " blocks away): " + nearest.why());
         return 1;
     }
 
