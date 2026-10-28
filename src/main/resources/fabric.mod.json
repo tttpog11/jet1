@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "kelphunt",
+  "version": "${version}",
+  "name": "Kelp Hunt",
+  "description": "Client-side base-hunting helper. Reads kelp growth from chunks your client already has loaded and marks ocean areas that look long-loaded on Xaero's World Map, with scored Minimap waypoints.",
+  "authors": ["you"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.kelphunt.KelpHuntClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "xaerominimap": "*",
+    "xaeroworldmap": "*"
+  }
+}

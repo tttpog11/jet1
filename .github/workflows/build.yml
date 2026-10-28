@@ -1,0 +1,52 @@
+name: Build mod
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: current
+
+      # Compile-time copies of Xaero's Minimap + World Map (exact versions the mod targets).
+      - name: Download Xaero jars
+        run: |
+          mkdir -p libs
+          fetch() {
+            slug="$1"; ver="$2"
+            url=$(curl -fsS "https://api.modrinth.com/v2/project/${slug}/version?loaders=%5B%22fabric%22%5D&game_versions=%5B%221.21.11%22%5D" \
+              | jq -r --arg v "$ver" '[.[] | select(.version_number | contains($v))][0].files[] | select(.primary) | .url')
+            test -n "$url" || { echo "::error::No ${slug} ${ver} for 1.21.11 found on Modrinth"; exit 1; }
+            curl -fsSL "$url" -o "libs/${slug}.jar"
+          }
+          fetch xaeros-minimap 26.6.0
+          fetch xaeros-world-map 1.47.0
+          ls -la libs
+
+      - name: Build
+        run: |
+          set +e
+          gradle build --no-daemon 2>&1 | tee build.log
+          CODE=${PIPESTATUS[0]}
+          if [ "$CODE" != "0" ]; then
+            ERR=$(grep -E -A3 "error:|What went wrong|Execution failed" build.log | head -60 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=Build errors::$ERR"
+          fi
+          exit $CODE
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: kelphunt-mod
+          path: build/libs/kelphunt-*.jar
