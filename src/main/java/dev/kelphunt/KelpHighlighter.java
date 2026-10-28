@@ -60,8 +60,8 @@ public class KelpHighlighter extends ChunkHighlighter {
     private static Component tip(int chunkX, int chunkZ) {
         ChunkReport r = get(chunkX, chunkZ);
         if (r == null) return null;
-        return Component.literal(String.format("Kelp Hunt: score %d (%.0f%% of kelp fully grown%s)",
-            r.score(), r.doneFraction() * 100, r.old() ? ", old chunk" : r.fresh() ? ", new chunk" : ""));
+        return Component.literal(String.format("Kelp Hunt: %s confidence, score %d (%.0f%% of kelp fully grown%s)",
+            r.score() >= 70 ? "high" : r.score() >= 35 ? "medium" : "low", r.score(), r.doneFraction() * 100, r.old() ? ", old chunk" : r.fresh() ? ", new chunk" : ""));
     }
 
     @Override

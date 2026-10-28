@@ -37,7 +37,7 @@ public final class KelpScanner {
     private static final double NEW_CHUNK_FACTOR = 0.25;
 
     /** Waypoints are only made for clusters scoring at least this. */
-    public int minWaypointScore = 35;
+    public int minWaypointScore = 10;
 
     private final ArrayDeque<ChunkPos> queue = new ArrayDeque<>();
     /** Everything measured so far. Kept across scans so the baseline grows as you explore. */

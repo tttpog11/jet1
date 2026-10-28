@@ -13,15 +13,21 @@ import java.util.List;
 
 /** Everything that touches Xaero's Minimap classes. Only loaded when that mod is present. */
 public final class MiniMapLink {
-    /** Waypoints we create are named "KH <score>"; that prefix is how we find them again. */
+    /** Waypoints we create are named "KH Low", "KH Confident" or "KH High"; that prefix is how we find them again. */
     private static final String PREFIX = "KH ";
 
     private MiniMapLink() {}
 
+    /** Low (under 35), Confident (35-69), High (70+). */
+    private static String labelFor(int score) {
+        if (score >= 70) return "High";
+        if (score >= 35) return "Confident";
+        return "Low";
+    }
+
     private static WaypointColor colorFor(int score) {
-        if (score >= 85) return WaypointColor.DARK_RED;
         if (score >= 70) return WaypointColor.RED;
-        if (score >= 50) return WaypointColor.GOLD;
+        if (score >= 35) return WaypointColor.GOLD;
         return WaypointColor.YELLOW;
     }
 
@@ -40,7 +46,7 @@ public final class MiniMapLink {
             removeOurs(set);
             int n = 0;
             for (Cluster c : clusters) {
-                set.add(new Waypoint(c.x(), c.y(), c.z(), PREFIX + c.score(), "K", colorFor(c.score())));
+                set.add(new Waypoint(c.x(), c.y(), c.z(), PREFIX + labelFor(c.score()), "K", colorFor(c.score())));
                 n++;
             }
             ms.getWorldManagerIO().saveWorld(world);
