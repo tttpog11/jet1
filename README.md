@@ -6,6 +6,10 @@ is compared with the ocean-wide average, paints them on the World Map and drops 
 
 Needs: Fabric Loader 0.18+, Fabric API, Xaero's Minimap 26.6.0 and World Map 1.47.0.
 
+## XaeroPlus (optional)
+With XaeroPlus installed, switch on its **Old Chunks** and **New Chunks** modules. Old chunks add +20 to a chunk's
+score; new chunks are scaled to 25% (they can't have been loaded for long). Longer loaded = stronger evidence.
+
 ## Commands
 - `/kelphunt scan [radius]`  scan loaded chunks (default 12, max 32). Waypoints are named `KH <score>`.
 - `/kelphunt auto`           toggle rescanning every ~15 s while you fly around

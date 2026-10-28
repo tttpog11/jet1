@@ -1,5 +1,6 @@
 package dev.kelphunt;
 
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -29,6 +30,11 @@ public final class KelpScanner {
     private static final int CHUNKS_PER_TICK = 6;
     private static final int MIN_HEADS = 4;
     private static final int MAX_CLUSTERS = 20;
+    private static final boolean HAS_XAEROPLUS = FabricLoader.getInstance().isModLoaded("xaeroplus");
+    /** Added to the kelp score for a chunk XaeroPlus lists as old. */
+    private static final int OLD_CHUNK_BONUS = 20;
+    /** A newly generated chunk can't have been loaded for long, so its score is scaled down. */
+    private static final double NEW_CHUNK_FACTOR = 0.25;
 
     /** Waypoints are only made for clusters scoring at least this. */
     public int minWaypointScore = 35;
@@ -115,7 +121,12 @@ public final class KelpScanner {
             }
         }
         if (heads < MIN_HEADS) return null;
-        return new ChunkReport(pos, heads, (double) done / heads, (int) (ySum / heads), 0);
+        boolean old = false, fresh = false;
+        if (HAS_XAEROPLUS) {
+            old = XaeroPlusLink.isOld(pos.x, pos.z, level.dimension());
+            fresh = XaeroPlusLink.isNew(pos.x, pos.z, level.dimension());
+        }
+        return new ChunkReport(pos, heads, (double) done / heads, (int) (ySum / heads), 0, old, fresh);
     }
 
     /**
@@ -136,6 +147,8 @@ public final class KelpScanner {
         for (Map.Entry<ChunkPos, ChunkReport> e : reports.entrySet()) {
             double z = (e.getValue().doneFraction() - mean) / sd;
             int score = (int) Math.round(Math.max(0, Math.min(100, z * 40)));
+            if (e.getValue().fresh()) score = (int) Math.round(score * NEW_CHUNK_FACTOR);
+            else if (e.getValue().old()) score = Math.min(100, score + OLD_CHUNK_BONUS);
             ChunkReport scored = e.getValue().withScore(score);
             e.setValue(scored);
             if (score > 0) positives.put(e.getKey().toLong(), scored);

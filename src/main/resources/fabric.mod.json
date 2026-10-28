@@ -18,6 +18,7 @@
   },
   "suggests": {
     "xaerominimap": "*",
-    "xaeroworldmap": "*"
+    "xaeroworldmap": "*",
+    "xaeroplus": "*"
   }
 }
