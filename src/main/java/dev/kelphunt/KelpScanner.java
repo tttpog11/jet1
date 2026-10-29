@@ -197,10 +197,11 @@ public final class KelpScanner {
         }
         return new ChunkReport(pos, hasKelp ? heads : 0, hasKelp ? (double) done / heads : 0,
             hasKelp ? (int) (ySum / heads) : floorMean, 0, old, fresh, above, rough,
-            am == null ? 0 : am.budding(), am == null ? 0 : am.fill(), am == null ? 0 : am.avgY(), am == null ? 0 : am.cavePct());
+            am == null ? 0 : am.budding(), am == null ? 0 : am.fill(), am == null ? 0 : am.avgY(), am == null ? 0 : am.avgX(), am == null ? 0 : am.avgZ(),
+            am == null ? 0 : am.cavePct());
     }
 
-    private record Amethyst(int budding, double fill, int avgY, int cavePct) {}
+    private record Amethyst(int budding, double fill, int avgY, int avgX, int avgZ, int cavePct) {}
 
     private static int stage(BlockState s) {
         if (s.is(Blocks.SMALL_AMETHYST_BUD)) return 1;
@@ -219,7 +220,7 @@ public final class KelpScanner {
         LevelChunkSection[] sections = chunk.getSections();
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         int budding = 0, open = 0, fillSum = 0;
-        long ySum = 0;
+        long ySum = 0, xSum = 0, zSum = 0;
         for (int i = 0; i < sections.length; i++) {
             LevelChunkSection sec = sections[i];
             if (sec == null || sec.hasOnlyAir() || !sec.maybeHas(s -> s.is(Blocks.BUDDING_AMETHYST))) continue;
@@ -230,6 +231,8 @@ public final class KelpScanner {
                         if (!sec.getBlockState(x, y, z).is(Blocks.BUDDING_AMETHYST)) continue;
                         budding++;
                         ySum += baseY + y;
+                        xSum += pos.getMinBlockX() + x;
+                        zSum += pos.getMinBlockZ() + z;
                         p.set(pos.getMinBlockX() + x, baseY + y, pos.getMinBlockZ() + z);
                         for (Direction d : Direction.values()) {
                             BlockState n = level.getBlockState(p.relative(d));
@@ -256,6 +259,7 @@ public final class KelpScanner {
             }
         }
         return new Amethyst(budding, fillSum / (4.0 * open), (int) (ySum / budding),
+            (int) (xSum / budding), (int) (zSum / budding),
             (int) Math.round(100.0 * air / Math.max(1, total)));
     }
 
@@ -359,6 +363,13 @@ public final class KelpScanner {
                 spanZ = maxZ - minZ + 1;
             }
             boolean geode = peak.budding() > 0;
+            if (geode) {
+                // Amethyst is a measurement of one specific geode, so point at it instead of the patch middle.
+                bx = peak.amX();
+                bz = peak.amZ();
+                spanX = 1;
+                spanZ = 1;
+            }
             out.add(new Cluster(bx, geode ? peak.amY() : peak.avgY(), bz,
                 score, members.size(), peak.heads() >= MIN_HEADS ? (int) Math.round(peak.doneFraction() * 100) : -1,
                 peak.old(), peak.fresh(), peak.above() >= ABOVE_COLUMNS, peak.rough(), spanX, spanZ,

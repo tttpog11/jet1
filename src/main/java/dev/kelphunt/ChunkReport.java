@@ -16,13 +16,15 @@ import net.minecraft.world.level.ChunkPos;
  * @param budding      budding amethyst blocks found (0 = no geode measured)
  * @param amFill       0-1, how fully grown the amethyst buds around them are (clusters = 1)
  * @param amY          mean Y of the budding amethyst, a rough depth
+ * @param amX          mean X of the budding amethyst
+ * @param amZ          mean Z of the budding amethyst
  * @param cavePct      percent of sampled underground space that is open air
  */
 public record ChunkReport(ChunkPos pos, int heads, double doneFraction, int avgY, int score,
                           boolean old, boolean fresh, int above, boolean rough,
-                          int budding, double amFill, int amY, int cavePct) {
+                          int budding, double amFill, int amY, int amX, int amZ, int cavePct) {
     public ChunkReport withScore(int newScore) {
         return new ChunkReport(pos, heads, doneFraction, avgY, newScore, old, fresh, above, rough,
-            budding, amFill, amY, cavePct);
+            budding, amFill, amY, amX, amZ, cavePct);
     }
 }

@@ -13,8 +13,11 @@ import java.util.List;
 
 /** Everything that touches Xaero's Minimap classes. Only loaded when that mod is present. */
 public final class MiniMapLink {
-    /** Waypoints we create are named "KH Low", "KH Confident" or "KH High"; that prefix is how we find them again. */
-    private static final String PREFIX = "KH ";
+    /**
+     * Waypoints we create are named "Amethyst High - ..." or "Kelp Low - ...". They are found again by symbol
+     * ("A" or "K") plus that name prefix, so your own waypoints are never touched. "KH " is the old prefix.
+     */
+    private static final String AMETHYST = "Amethyst ", KELP = "Kelp ", OLD = "KH ";
 
     private MiniMapLink() {}
 
@@ -25,12 +28,18 @@ public final class MiniMapLink {
         return "Low";
     }
 
-    /** e.g. "KH Low - 84 pct grown, old chunk, 3 chunks": the label plus the reasons behind the score. */
+    private static boolean isAmethyst(Cluster c) { return c.amethystPct() >= 0; }
+
+    /** e.g. "Amethyst High - 92 pct grown, caves 11 pct" or "Kelp Low - 84 pct grown, old chunk". */
     private static String nameFor(Cluster c) {
-        StringBuilder sb = new StringBuilder(PREFIX).append(labelFor(c.score())).append(" -");
-        if (c.grownPct() >= 0) sb.append(" kelp ").append(c.grownPct()).append(" pct grown");
-        if (c.amethystPct() >= 0) sb.append(c.grownPct() >= 0 ? ", " : " ").append("amethyst ").append(c.amethystPct()).append(" pct grown");
-        if (c.cavePct() >= 0) sb.append(", caves ").append(c.cavePct()).append(" pct");
+        StringBuilder sb = new StringBuilder(isAmethyst(c) ? AMETHYST : KELP).append(labelFor(c.score())).append(" -");
+        if (isAmethyst(c)) {
+            sb.append(' ').append(c.amethystPct()).append(" pct grown");
+            if (c.grownPct() >= 0) sb.append(", kelp ").append(c.grownPct()).append(" pct grown");
+            sb.append(", caves ").append(c.cavePct()).append(" pct");
+        } else if (c.grownPct() >= 0) {
+            sb.append(' ').append(c.grownPct()).append(" pct grown");
+        }
         if (c.above()) sb.append(", above-water blocks");
         if (c.rough()) sb.append(", rough seabed");
         if (c.fresh()) sb.append(", new chunk");
@@ -61,7 +70,7 @@ public final class MiniMapLink {
             removeOurs(set);
             int n = 0;
             for (Cluster c : clusters) {
-                set.add(new Waypoint(c.x(), c.y(), c.z(), nameFor(c), "K", colorFor(c.score())));
+                set.add(new Waypoint(c.x(), c.y(), c.z(), nameFor(c), isAmethyst(c) ? "A" : "K", colorFor(c.score())));
                 n++;
             }
             ms.getWorldManagerIO().saveWorld(world);
@@ -79,7 +88,11 @@ public final class MiniMapLink {
     private static void removeOurs(WaypointSet set) {
         List<Waypoint> mine = new ArrayList<>();
         for (Waypoint w : set.getWaypoints()) {
-            if (w.getName() != null && w.getName().startsWith(PREFIX)) mine.add(w);
+            String name = w.getName();
+            String sym = w.getSymbol();
+            boolean ours = name != null && ("K".equals(sym) || "A".equals(sym))
+                && (name.startsWith(AMETHYST) || name.startsWith(KELP) || name.startsWith(OLD));
+            if (ours) mine.add(w);
         }
         set.removeAll(mine);
     }

@@ -29,7 +29,7 @@ Uses the chunk heightmaps your client already has, no block searching:
 Natural things (monuments, shipwrecks, ruins, islands) can trigger these too, so they only add to the score.
 
 ## Commands
-- `/kelphunt scan [radius]`  scan loaded chunks (default 12, max 32). Waypoints are named `KH Low` (score under 35), `KH Confident` (35-69) or `KH High` (70+), followed by why, e.g. `KH Low - 84 pct grown, old chunk, 3 chunks`.
+- `/kelphunt scan [radius]`  scan loaded chunks (default 12, max 32). Waypoints are named `Amethyst High - 92 pct grown, caves 11 pct` or `Kelp Low - 84 pct grown, old chunk`: the evidence type, a confidence label (Low under 35, Confident 35-69, High 70+), then why. Amethyst waypoints point at the geode itself; kelp waypoints point at the middle of the grown patch.
 - `/kelphunt auto`           toggle rescanning every ~15 s while you fly around
 - `/kelphunt min <score>`    minimum score for a waypoint (default 10)
 - `/kelphunt skipnear`      toggle skipping chunks inside your own simulation distance
