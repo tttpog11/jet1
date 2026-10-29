@@ -58,6 +58,18 @@ public class KelpHuntClient implements ClientModInitializer {
                             : "scoring every loaded chunk, including ones you are loading yourself.");
                         return 1;
                     }))
+                .then(ClientCommandManager.literal("geodes")
+                    .then(ClientCommandManager.literal("load")
+                        .executes(ctx -> loadGeodes(ctx.getSource(), false))
+                        .then(ClientCommandManager.literal("block")
+                            .executes(ctx -> loadGeodes(ctx.getSource(), true))))
+                    .then(ClientCommandManager.literal("clear")
+                        .executes(ctx -> {
+                            GeodeTargets.clear();
+                            if (hasMiniMap) MiniMapLink.apply(KelpData.clusters);
+                            say(ctx.getSource(), "geode targets cleared.");
+                            return 1;
+                        })))
                 .then(ClientCommandManager.literal("amethyst")
                     .executes(ctx -> {
                         SCANNER.amethyst = !SCANNER.amethyst;
@@ -100,13 +112,27 @@ public class KelpHuntClient implements ClientModInitializer {
         return 1;
     }
 
+    /** Reads kelphunt-geodes.csv (positions predicted from the seed by an outside tool) and marks them on the map. */
+    private static int loadGeodes(FabricClientCommandSource src, boolean blockCoords) {
+        try {
+            int n = GeodeTargets.load(blockCoords);
+            if (hasMiniMap) MiniMapLink.apply(KelpData.clusters);
+            say(src, "loaded " + n + " geode target(s) from " + GeodeTargets.FILE_NAME + " (read as "
+                + (blockCoords ? "block" : "chunk") + " coordinates). The 100 nearest get waypoints. Scan to update them.");
+            return 1;
+        } catch (java.io.IOException e) {
+            say(src, "could not read " + GeodeTargets.FILE_NAME + " in your game folder.");
+            return 0;
+        }
+    }
+
     private static int status(FabricClientCommandSource src) {
         FabricLoader l = FabricLoader.getInstance();
         say(src, "Minimap " + (hasMiniMap ? "yes" : "no") + ", World Map " + (hasWorldMap ? "yes" : "no")
             + ", XaeroPlus " + (l.isModLoaded("xaeroplus") ? "yes" : "no") + ". "
             + SCANNER.measuredChunks() + " ocean chunks measured, " + KelpData.clusters.size() + " candidate spot(s), "
             + KelpData.positives.size() + " highlighted chunk(s). Waypoint cutoff " + SCANNER.minWaypointScore
-            + ", amethyst " + (SCANNER.amethyst ? "on" : "off") + ", terrain " + (SCANNER.terrain ? "on" : "off") + ", skip-near " + (SCANNER.skipNear ? "on (" + SCANNER.skippedNear() + " skipped last scan)" : "off")
+            + ", geode targets " + GeodeTargets.chunks.size() + ", amethyst " + (SCANNER.amethyst ? "on" : "off") + ", terrain " + (SCANNER.terrain ? "on" : "off") + ", skip-near " + (SCANNER.skipNear ? "on (" + SCANNER.skippedNear() + " skipped last scan)" : "off")
             + ", auto " + (auto ? "on" : "off") + ".");
         return 1;
     }

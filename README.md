@@ -17,6 +17,15 @@ sees underground bases. It reads the block data your client already has and repo
 individual geode positions. Open cave space in the chunk adds up to +15 (natural caves count too, so it only nudges).
 The waypoint Y is the geode depth. Toggle with `/kelphunt amethyst`.
 
+## Seed-predicted geodes (optional)
+Kelp Hunt can't predict geodes itself. Run an outside tool that does (for example
+[geode-finder](https://github.com/soulsoiledit/geode-finder), a Rust program) with your world seed, save its
+positions to `kelphunt-geodes.csv` in the game folder (one per line, the first two integers are used), then
+`/kelphunt geodes load` (chunk coordinates, the usual tool output) or `/kelphunt geodes load block`.
+The 100 nearest targets get `Geode ...` waypoints: light blue = not scanned yet (go and load it), green = scanned and
+amethyst found (with how grown), gray = scanned and nothing was there. `/kelphunt geodes clear` removes them.
+This does not give you chunks you haven't loaded; the server never sends those.
+
 ## Underground bases
 A base loads the chunks above it, so kelp over it keeps growing. The waypoint sits at the middle of the strong patch
 (a parked player keeps a square of chunks ticking around them) and the name shows the patch size, e.g. `21x21 chunk patch`.

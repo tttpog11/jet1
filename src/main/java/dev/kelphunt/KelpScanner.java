@@ -66,12 +66,16 @@ public final class KelpScanner {
     private final ArrayDeque<ChunkPos> queue = new ArrayDeque<>();
     /** Everything measured so far. Kept across scans so the baseline grows as you explore. */
     private final Map<ChunkPos, ChunkReport> reports = new HashMap<>();
+    /** Every chunk that was actually read (loaded and not skipped), whether or not it showed anything. */
+    private final Set<Long> scanned = new HashSet<>();
     private boolean running;
     private boolean finishedFlag;
 
     public boolean isRunning() { return running; }
     public int remaining() { return queue.size(); }
     public int measuredChunks() { return reports.size(); }
+    public boolean isScanned(int cx, int cz) { return scanned.contains(ChunkPos.asLong(cx, cz)); }
+    public ChunkReport reportAt(int cx, int cz) { return reports.get(new ChunkPos(cx, cz)); }
 
     /** True exactly once after a scan finishes. */
     public boolean pollFinished() {
@@ -97,6 +101,7 @@ public final class KelpScanner {
     public void clearAll() {
         queue.clear();
         reports.clear();
+        scanned.clear();
         running = false;
         finishedFlag = false;
         KelpData.clear();
@@ -130,6 +135,7 @@ public final class KelpScanner {
                 return null;
             }
         }
+        scanned.add(pos.toLong());
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         int top = level.getSeaLevel();
         p.set(pos.getMiddleBlockX(), top - 8, pos.getMiddleBlockZ());
