@@ -63,8 +63,10 @@ public class KelpHighlighter extends ChunkHighlighter {
         StringBuilder sb = new StringBuilder("Kelp Hunt: ")
             .append(r.score() >= 70 ? "high" : r.score() >= 35 ? "medium" : "low")
             .append(" confidence, score ").append(r.score());
-        if (r.heads() > 0) sb.append(String.format(" (%.0f%% of kelp fully grown", r.doneFraction() * 100));
-        else sb.append(" (too little kelp to judge");
+        sb.append(" (");
+        if (r.heads() > 0) sb.append(String.format("%.0f%% of kelp fully grown", r.doneFraction() * 100));
+        else sb.append("too little kelp to judge");
+        if (r.budding() > 0) sb.append(String.format(", amethyst %.0f%% grown, caves %d%%", r.amFill() * 100, r.cavePct()));
         if (r.old()) sb.append(", old chunk"); else if (r.fresh()) sb.append(", new chunk");
         if (r.above() >= 3) sb.append(", above-water blocks");
         if (r.rough()) sb.append(", rough seabed");

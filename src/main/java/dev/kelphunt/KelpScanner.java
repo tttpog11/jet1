@@ -4,6 +4,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.tags.BiomeTags;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
@@ -12,6 +13,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 
@@ -38,6 +40,12 @@ public final class KelpScanner {
     private static final int ABOVE_BONUS = 15;
     private static final int ROUGH_BONUS = 10;
     private static final int MAX_CLUSTERS = 20;
+    /** Budding amethyst blocks / open faces needed before a chunk's geode is judged. */
+    private static final int MIN_BUDDING = 3;
+    private static final int MIN_OPEN_FACES = 6;
+    /** Cave bonus: 0 at 4% open air, full at 14%. A guess; natural cave-rich areas also score. */
+    private static final double CAVE_FLOOR = 0.04, CAVE_SPAN = 0.10;
+    private static final int CAVE_BONUS_MAX = 15;
     private static final boolean HAS_XAEROPLUS = FabricLoader.getInstance().isModLoaded("xaeroplus");
     /** Added to the kelp score for a chunk XaeroPlus lists as old. */
     private static final int OLD_CHUNK_BONUS = 20;
@@ -50,6 +58,8 @@ public final class KelpScanner {
     public boolean skipNear = false;
     /** Also use seabed/above-water shape as extra evidence (cheap, vanilla heightmap data). */
     public boolean terrain = false;
+    /** Read budding amethyst growth in loaded chunks (geodes are underground; buds only grow while loaded). */
+    public boolean amethyst = true;
     private int skippedNear;
     public int skippedNear() { return skippedNear; }
 
@@ -123,13 +133,13 @@ public final class KelpScanner {
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         int top = level.getSeaLevel();
         p.set(pos.getMiddleBlockX(), top - 8, pos.getMiddleBlockZ());
-        if (!level.getBiome(p).is(BiomeTags.IS_OCEAN)) return null;
+        boolean ocean = level.getBiome(p).is(BiomeTags.IS_OCEAN);
 
         int bottom = Math.max(level.getMinY(), top - 45);
         int heads = 0, done = 0;
         long ySum = 0;
 
-        for (int x = 0; x < 16; x++) {
+        for (int x = 0; ocean && x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 for (int y = top; y >= bottom; y--) {
                     p.set(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
@@ -148,7 +158,7 @@ public final class KelpScanner {
         int above = 0;
         boolean rough = false;
         int floorMean = top - 20;
-        if (terrain) {
+        if (terrain && ocean) {
             int[] floor = new int[256];
             long fsum = 0;
             for (int x = 0; x < 16; x++) {
@@ -178,14 +188,75 @@ public final class KelpScanner {
         }
         boolean hasKelp = heads >= MIN_HEADS;
         boolean anomaly = above >= ABOVE_COLUMNS || rough;
-        if (!hasKelp && !anomaly) return null;
+        Amethyst am = amethyst ? scanAmethyst(level, chunk, pos) : null;
+        if (!hasKelp && !anomaly && am == null) return null;
         boolean old = false, fresh = false;
         if (HAS_XAEROPLUS) {
             old = XaeroPlusLink.isOld(pos.x, pos.z, level.dimension());
             fresh = XaeroPlusLink.isNew(pos.x, pos.z, level.dimension());
         }
         return new ChunkReport(pos, hasKelp ? heads : 0, hasKelp ? (double) done / heads : 0,
-            hasKelp ? (int) (ySum / heads) : floorMean, 0, old, fresh, above, rough);
+            hasKelp ? (int) (ySum / heads) : floorMean, 0, old, fresh, above, rough,
+            am == null ? 0 : am.budding(), am == null ? 0 : am.fill(), am == null ? 0 : am.avgY(), am == null ? 0 : am.cavePct());
+    }
+
+    private record Amethyst(int budding, double fill, int avgY, int cavePct) {}
+
+    private static int stage(BlockState s) {
+        if (s.is(Blocks.SMALL_AMETHYST_BUD)) return 1;
+        if (s.is(Blocks.MEDIUM_AMETHYST_BUD)) return 2;
+        if (s.is(Blocks.LARGE_AMETHYST_BUD)) return 3;
+        if (s.is(Blocks.AMETHYST_CLUSTER)) return 4;
+        return 0;
+    }
+
+    /**
+     * Budding amethyst grows its buds (small, medium, large, cluster) only while its chunk is loaded, and one
+     * growth step takes tens of minutes, so full clusters mean hours of loading. Only sections whose block
+     * palette contains budding amethyst are looked at. Also samples how much of the underground is open air.
+     */
+    private Amethyst scanAmethyst(ClientLevel level, LevelChunk chunk, ChunkPos pos) {
+        LevelChunkSection[] sections = chunk.getSections();
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+        int budding = 0, open = 0, fillSum = 0;
+        long ySum = 0;
+        for (int i = 0; i < sections.length; i++) {
+            LevelChunkSection sec = sections[i];
+            if (sec == null || sec.hasOnlyAir() || !sec.maybeHas(s -> s.is(Blocks.BUDDING_AMETHYST))) continue;
+            int baseY = level.getSectionYFromSectionIndex(i) << 4;
+            for (int x = 0; x < 16; x++) {
+                for (int y = 0; y < 16; y++) {
+                    for (int z = 0; z < 16; z++) {
+                        if (!sec.getBlockState(x, y, z).is(Blocks.BUDDING_AMETHYST)) continue;
+                        budding++;
+                        ySum += baseY + y;
+                        p.set(pos.getMinBlockX() + x, baseY + y, pos.getMinBlockZ() + z);
+                        for (Direction d : Direction.values()) {
+                            BlockState n = level.getBlockState(p.relative(d));
+                            int st = stage(n);
+                            if (st > 0 || n.isAir() || n.is(Blocks.WATER)) {
+                                open++;
+                                fillSum += st;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (budding < MIN_BUDDING || open < MIN_OPEN_FACES) return null;
+
+        int air = 0, total = 0;
+        for (int y = level.getMinY(); y <= 50; y += 2) {
+            for (int x = 0; x < 16; x += 2) {
+                for (int z = 0; z < 16; z += 2) {
+                    p.set(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
+                    total++;
+                    if (chunk.getBlockState(p).isAir()) air++;
+                }
+            }
+        }
+        return new Amethyst(budding, fillSum / (4.0 * open), (int) (ySum / budding),
+            (int) Math.round(100.0 * air / Math.max(1, total)));
     }
 
     /**
@@ -205,13 +276,31 @@ public final class KelpScanner {
         double var = kelpChunks.stream().mapToDouble(r -> Math.pow(r.doneFraction() - mean, 2)).average().orElse(0);
         double sd = Math.max(Math.sqrt(var), 0.05); // floor stops a uniform ocean from exploding
 
+        // Amethyst: relative to other measured geodes when there are enough, otherwise an absolute scale.
+        List<ChunkReport> geodes = reports.values().stream().filter(r -> r.budding() > 0).toList();
+        boolean amBaseline = geodes.size() >= 5;
+        double amMean = geodes.stream().mapToDouble(ChunkReport::amFill).average().orElse(0);
+        double amVar = geodes.stream().mapToDouble(r -> Math.pow(r.amFill() - amMean, 2)).average().orElse(0);
+        double amSd = Math.max(Math.sqrt(amVar), 0.05);
+
         Map<Long, ChunkReport> positives = new HashMap<>();
         for (Map.Entry<ChunkPos, ChunkReport> e : reports.entrySet()) {
             ChunkReport r = e.getValue();
-            int score = 0;
+            int kelpScore = 0;
             if (baseline && r.heads() >= MIN_HEADS) {
                 double z = (r.doneFraction() - mean) / sd;
-                score = (int) Math.round(Math.max(0, Math.min(100, z * 40)));
+                kelpScore = (int) Math.round(Math.max(0, Math.min(100, z * 40)));
+            }
+            int amScore = 0;
+            if (r.budding() > 0) {
+                double v = amBaseline ? (r.amFill() - amMean) / amSd * 40 : (r.amFill() - 0.6) / 0.35 * 100;
+                amScore = (int) Math.round(Math.max(0, Math.min(100, v)));
+            }
+            // Two independent kinds of "has been loaded a long time" evidence: the stronger counts fully, the other half.
+            int score = Math.min(100, Math.max(kelpScore, amScore) + Math.min(kelpScore, amScore) / 2);
+            if (r.budding() > 0) {
+                double caves = (r.cavePct() / 100.0 - CAVE_FLOOR) / CAVE_SPAN * CAVE_BONUS_MAX;
+                score += (int) Math.round(Math.max(0, Math.min(CAVE_BONUS_MAX, caves)));
             }
             if (r.above() >= ABOVE_COLUMNS) score += ABOVE_BONUS;
             if (r.rough()) score += ROUGH_BONUS;
@@ -269,9 +358,11 @@ public final class KelpScanner {
                 spanX = maxX - minX + 1;
                 spanZ = maxZ - minZ + 1;
             }
-            out.add(new Cluster(bx, peak.avgY(), bz,
+            boolean geode = peak.budding() > 0;
+            out.add(new Cluster(bx, geode ? peak.amY() : peak.avgY(), bz,
                 score, members.size(), peak.heads() >= MIN_HEADS ? (int) Math.round(peak.doneFraction() * 100) : -1,
-                peak.old(), peak.fresh(), peak.above() >= ABOVE_COLUMNS, peak.rough(), spanX, spanZ));
+                peak.old(), peak.fresh(), peak.above() >= ABOVE_COLUMNS, peak.rough(), spanX, spanZ,
+                geode ? (int) Math.round(peak.amFill() * 100) : -1, geode ? peak.cavePct() : -1));
         }
         out.sort(Comparator.comparingInt(Cluster::score).reversed());
         return out.size() > MAX_CLUSTERS ? new ArrayList<>(out.subList(0, MAX_CLUSTERS)) : out;

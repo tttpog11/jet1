@@ -28,7 +28,9 @@ public final class MiniMapLink {
     /** e.g. "KH Low - 84 pct grown, old chunk, 3 chunks": the label plus the reasons behind the score. */
     private static String nameFor(Cluster c) {
         StringBuilder sb = new StringBuilder(PREFIX).append(labelFor(c.score())).append(" -");
-        if (c.grownPct() >= 0) sb.append(' ').append(c.grownPct()).append(" pct grown");
+        if (c.grownPct() >= 0) sb.append(" kelp ").append(c.grownPct()).append(" pct grown");
+        if (c.amethystPct() >= 0) sb.append(c.grownPct() >= 0 ? ", " : " ").append("amethyst ").append(c.amethystPct()).append(" pct grown");
+        if (c.cavePct() >= 0) sb.append(", caves ").append(c.cavePct()).append(" pct");
         if (c.above()) sb.append(", above-water blocks");
         if (c.rough()) sb.append(", rough seabed");
         if (c.fresh()) sb.append(", new chunk");

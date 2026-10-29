@@ -10,6 +10,13 @@ Needs: Fabric Loader 0.18+, Fabric API, Xaero's Minimap 26.6.0 and World Map 1.4
 With XaeroPlus installed, switch on its **Old Chunks** and **New Chunks** modules. Old chunks add +20 to a chunk's
 score; new chunks are scaled to 25% (they can't have been loaded for long). Longer loaded = stronger evidence.
 
+## Amethyst and caves
+Budding amethyst grows its buds only while its chunk is loaded, and each growth step takes tens of minutes, so
+fully grown clusters mean hours of loading (kelp saturates after roughly half an hour). Geodes are underground, so this
+sees underground bases. It reads the block data your client already has and reports one score per chunk, never
+individual geode positions. Open cave space in the chunk adds up to +15 (natural caves count too, so it only nudges).
+The waypoint Y is the geode depth. Toggle with `/kelphunt amethyst`.
+
 ## Underground bases
 A base loads the chunks above it, so kelp over it keeps growing. The waypoint sits at the middle of the strong patch
 (a parked player keeps a square of chunks ticking around them) and the name shows the patch size, e.g. `21x21 chunk patch`.
@@ -26,6 +33,7 @@ Natural things (monuments, shipwrecks, ruins, islands) can trigger these too, so
 - `/kelphunt auto`           toggle rescanning every ~15 s while you fly around
 - `/kelphunt min <score>`    minimum score for a waypoint (default 10)
 - `/kelphunt skipnear`      toggle skipping chunks inside your own simulation distance
+- `/kelphunt amethyst`      toggle amethyst + cave evidence (on by default)
 - `/kelphunt terrain`       toggle the seabed / above-water evidence (off by default; only helps with surface builds)
 - `/kelphunt status`        show what is detected and the current settings
 - `/kelphunt export`        write candidates (with coordinates) to `kelphunt-candidates.csv` in the game folder
