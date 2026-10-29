@@ -6,4 +6,5 @@ package dev.kelphunt;
  */
 public record Cluster(int x, int y, int z, int score, int chunks, int grownPct,
                       boolean old, boolean fresh, boolean above, boolean rough,
-                      int spanX, int spanZ, int amethystPct, int cavePct) {}
+                      int spanX, int spanZ, int amethystPct, int cavePct,
+                      int mobs, int traders, int llamas, int skelHorses) {}

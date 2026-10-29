@@ -17,6 +17,13 @@ sees underground bases. It reads the block data your client already has and repo
 individual geode positions. Open cave space in the chunk adds up to +15 (natural caves count too, so it only nudges).
 The waypoint Y is the geode depth. Toggle with `/kelphunt amethyst`.
 
+## Mobs
+Counts mobs your client can currently see when a scan finishes (players excluded). A wandering trader adds +25 (a trader
+llama alone +10), a skeleton horse +15, and 25+ mobs in one chunk +10 (60+ gives +20). A chunk with only mob evidence gets a
+`Mobs ...` waypoint, e.g. `Mobs Confident - wandering trader, 31 mobs`. These can be completely innocent (a trader wandering by,
+a lightning trap on a quiet hill), so they only raise the score. Your client only knows about entities near you, so scan while you
+are in the area. `/kelphunt mobs` toggles it.
+
 ## Seed-predicted geodes (optional)
 Kelp Hunt can't predict geodes itself. Run an outside tool that does (for example
 [geode-finder](https://github.com/soulsoiledit/geode-finder), a Rust program) with your world seed, save its
@@ -42,6 +49,7 @@ Natural things (monuments, shipwrecks, ruins, islands) can trigger these too, so
 - `/kelphunt auto`           toggle rescanning every ~15 s while you fly around
 - `/kelphunt min <score>`    minimum score for a waypoint (default 10)
 - `/kelphunt skipnear`      toggle skipping chunks inside your own simulation distance
+- `/kelphunt mobs`          toggle the mob evidence (on by default)
 - `/kelphunt amethyst`      toggle amethyst + cave evidence (on by default)
 - `/kelphunt terrain`       toggle the seabed / above-water evidence (off by default; only helps with surface builds)
 - `/kelphunt status`        show what is detected and the current settings

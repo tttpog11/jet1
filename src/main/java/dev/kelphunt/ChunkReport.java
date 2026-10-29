@@ -19,12 +19,22 @@ import net.minecraft.world.level.ChunkPos;
  * @param amX          mean X of the budding amethyst
  * @param amZ          mean Z of the budding amethyst
  * @param cavePct      percent of sampled underground space that is open air
+ * @param mobs         mobs (not players) your client has seen in this chunk
+ * @param traders      wandering traders seen
+ * @param llamas       trader llamas seen
+ * @param skelHorses   skeleton horses seen
  */
 public record ChunkReport(ChunkPos pos, int heads, double doneFraction, int avgY, int score,
                           boolean old, boolean fresh, int above, boolean rough,
-                          int budding, double amFill, int amY, int amX, int amZ, int cavePct) {
+                          int budding, double amFill, int amY, int amX, int amZ, int cavePct,
+                          int mobs, int traders, int llamas, int skelHorses) {
     public ChunkReport withScore(int newScore) {
         return new ChunkReport(pos, heads, doneFraction, avgY, newScore, old, fresh, above, rough,
-            budding, amFill, amY, amX, amZ, cavePct);
+            budding, amFill, amY, amX, amZ, cavePct, mobs, traders, llamas, skelHorses);
+    }
+
+    public ChunkReport withMobs(int mobs, int traders, int llamas, int skelHorses) {
+        return new ChunkReport(pos, heads, doneFraction, avgY, score, old, fresh, above, rough,
+            budding, amFill, amY, amX, amZ, cavePct, mobs, traders, llamas, skelHorses);
     }
 }

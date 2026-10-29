@@ -8,6 +8,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.tags.BiomeTags;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -60,12 +63,17 @@ public final class KelpScanner {
     public boolean terrain = false;
     /** Read budding amethyst growth in loaded chunks (geodes are underground; buds only grow while loaded). */
     public boolean amethyst = true;
+    /** Count mobs your client can currently see (wandering traders, trader llamas, skeleton horses, crowds). */
+    public boolean mobs = true;
     private int skippedNear;
     public int skippedNear() { return skippedNear; }
 
     private final ArrayDeque<ChunkPos> queue = new ArrayDeque<>();
     /** Everything measured so far. Kept across scans so the baseline grows as you explore. */
     private final Map<ChunkPos, ChunkReport> reports = new HashMap<>();
+    /** Mob sightings per chunk (ChunkPos.toLong). Counts keep their highest value seen, since mobs come and go. */
+    private final Map<Long, MobStat> mobStats = new HashMap<>();
+    private static final class MobStat { int mobs, traders, llamas, skel; long ySum; int yN; }
     /** Every chunk that was actually read (loaded and not skipped), whether or not it showed anything. */
     private final Set<Long> scanned = new HashSet<>();
     private boolean running;
@@ -101,6 +109,7 @@ public final class KelpScanner {
     public void clearAll() {
         queue.clear();
         reports.clear();
+        mobStats.clear();
         scanned.clear();
         running = false;
         finishedFlag = false;
@@ -204,7 +213,70 @@ public final class KelpScanner {
         return new ChunkReport(pos, hasKelp ? heads : 0, hasKelp ? (double) done / heads : 0,
             hasKelp ? (int) (ySum / heads) : floorMean, 0, old, fresh, above, rough,
             am == null ? 0 : am.budding(), am == null ? 0 : am.fill(), am == null ? 0 : am.avgY(), am == null ? 0 : am.avgX(), am == null ? 0 : am.avgZ(),
-            am == null ? 0 : am.cavePct());
+            am == null ? 0 : am.cavePct(), 0, 0, 0, 0);
+    }
+
+    /** Turns mob evidence off or on; off strips it from existing results. Takes effect fully on the next scan. */
+    public void setMobs(boolean on) {
+        mobs = on;
+        if (!on) {
+            mobStats.clear();
+            reports.replaceAll((k, r) -> r.withMobs(0, 0, 0, 0));
+        }
+    }
+
+    /**
+     * Mobs your client can see right now (entities outside its tracking range are never sent, so only
+     * nearby areas are covered). Merged into the per-chunk reports; chunks with only mob evidence get their own report.
+     */
+    private void mergeMobs(ClientLevel level) {
+        if (!mobs) return;
+        for (Entity e : level.entitiesForRendering()) {
+            if (!(e instanceof Mob)) continue; // players and non-mobs are ignored
+            long k = e.chunkPosition().toLong();
+            MobStat now = mobStats.computeIfAbsent(k, x -> new MobStat());
+            // recount this chunk's current mobs from zero only once per scan, below; here just accumulate
+            now.ySum += e.getBlockY();
+            now.yN++;
+        }
+        // second pass: current counts, keeping the highest seen
+        Map<Long, int[]> cur = new HashMap<>();
+        for (Entity e : level.entitiesForRendering()) {
+            if (!(e instanceof Mob)) continue;
+            int[] c = cur.computeIfAbsent(e.chunkPosition().toLong(), x -> new int[4]);
+            c[0]++;
+            EntityType<?> t = e.getType();
+            if (t == EntityType.WANDERING_TRADER) c[1]++;
+            else if (t == EntityType.TRADER_LLAMA) c[2]++;
+            else if (t == EntityType.SKELETON_HORSE) c[3]++;
+        }
+        for (Map.Entry<Long, int[]> en : cur.entrySet()) {
+            MobStat s = mobStats.get(en.getKey());
+            int[] c = en.getValue();
+            s.mobs = Math.max(s.mobs, c[0]);
+            s.traders = Math.max(s.traders, c[1]);
+            s.llamas = Math.max(s.llamas, c[2]);
+            s.skel = Math.max(s.skel, c[3]);
+        }
+        for (Map.Entry<Long, MobStat> en : mobStats.entrySet()) {
+            MobStat s = en.getValue();
+            ChunkPos pos = new ChunkPos(en.getKey());
+            ChunkReport r = reports.get(pos);
+            if (r == null) {
+                int y = s.yN > 0 ? (int) (s.ySum / s.yN) : 0;
+                r = new ChunkReport(pos, 0, 0, y, 0, false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            }
+            reports.put(pos, r.withMobs(s.mobs, s.traders, s.llamas, s.skel));
+        }
+    }
+
+    /** Wandering trader +25 (or trader llama alone +10), skeleton horse +15, 25+ mobs in a chunk +10, 60+ +20. */
+    private static int mobBonus(ChunkReport r) {
+        int b = 0;
+        if (r.traders() > 0) b += 25; else if (r.llamas() > 0) b += 10;
+        if (r.skelHorses() > 0) b += 15;
+        if (r.mobs() >= 60) b += 20; else if (r.mobs() >= 25) b += 10;
+        return b;
     }
 
     private record Amethyst(int budding, double fill, int avgY, int avgX, int avgZ, int cavePct) {}
@@ -275,6 +347,8 @@ public final class KelpScanner {
      */
     private void finish() {
         finishedFlag = true;
+        ClientLevel lvl = Minecraft.getInstance().level;
+        if (lvl != null) mergeMobs(lvl);
         if (reports.isEmpty()) {
             KelpData.clear();
             return;
@@ -317,6 +391,7 @@ public final class KelpScanner {
             score = Math.min(100, score);
             if (e.getValue().fresh()) score = (int) Math.round(score * NEW_CHUNK_FACTOR);
             else if (e.getValue().old()) score = Math.min(100, score + OLD_CHUNK_BONUS);
+            score = Math.min(100, score + mobBonus(r));
             ChunkReport scored = e.getValue().withScore(score);
             e.setValue(scored);
             if (score > 0) positives.put(e.getKey().toLong(), scored);
@@ -379,7 +454,8 @@ public final class KelpScanner {
             out.add(new Cluster(bx, geode ? peak.amY() : peak.avgY(), bz,
                 score, members.size(), peak.heads() >= MIN_HEADS ? (int) Math.round(peak.doneFraction() * 100) : -1,
                 peak.old(), peak.fresh(), peak.above() >= ABOVE_COLUMNS, peak.rough(), spanX, spanZ,
-                geode ? (int) Math.round(peak.amFill() * 100) : -1, geode ? peak.cavePct() : -1));
+                geode ? (int) Math.round(peak.amFill() * 100) : -1, geode ? peak.cavePct() : -1,
+                peak.mobs(), peak.traders(), peak.llamas(), peak.skelHorses()));
         }
         out.sort(Comparator.comparingInt(Cluster::score).reversed());
         return out.size() > MAX_CLUSTERS ? new ArrayList<>(out.subList(0, MAX_CLUSTERS)) : out;

@@ -68,6 +68,10 @@ public class KelpHighlighter extends ChunkHighlighter {
         else sb.append("too little kelp to judge");
         if (r.budding() > 0) sb.append(String.format(", amethyst %.0f%% grown, caves %d%%", r.amFill() * 100, r.cavePct()));
         if (r.old()) sb.append(", old chunk"); else if (r.fresh()) sb.append(", new chunk");
+        if (r.traders() > 0) sb.append(", wandering trader");
+        if (r.llamas() > 0) sb.append(", trader llama");
+        if (r.skelHorses() > 0) sb.append(", skeleton horse");
+        if (r.mobs() >= 25) sb.append(", ").append(r.mobs()).append(" mobs");
         if (r.above() >= 3) sb.append(", above-water blocks");
         if (r.rough()) sb.append(", rough seabed");
         return Component.literal(sb.append(")").toString());

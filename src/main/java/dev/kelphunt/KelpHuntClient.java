@@ -58,6 +58,14 @@ public class KelpHuntClient implements ClientModInitializer {
                             : "scoring every loaded chunk, including ones you are loading yourself.");
                         return 1;
                     }))
+                .then(ClientCommandManager.literal("mobs")
+                    .executes(ctx -> {
+                        SCANNER.setMobs(!SCANNER.mobs);
+                        say(ctx.getSource(), SCANNER.mobs
+                            ? "mob evidence ON: wandering traders, trader llamas, skeleton horses and crowds your client can currently see. Counted when a scan finishes."
+                            : "mob evidence off.");
+                        return 1;
+                    }))
                 .then(ClientCommandManager.literal("geodes")
                     .then(ClientCommandManager.literal("load")
                         .executes(ctx -> loadGeodes(ctx.getSource(), false))
@@ -132,7 +140,7 @@ public class KelpHuntClient implements ClientModInitializer {
             + ", XaeroPlus " + (l.isModLoaded("xaeroplus") ? "yes" : "no") + ". "
             + SCANNER.measuredChunks() + " ocean chunks measured, " + KelpData.clusters.size() + " candidate spot(s), "
             + KelpData.positives.size() + " highlighted chunk(s). Waypoint cutoff " + SCANNER.minWaypointScore
-            + ", geode targets " + GeodeTargets.chunks.size() + ", amethyst " + (SCANNER.amethyst ? "on" : "off") + ", terrain " + (SCANNER.terrain ? "on" : "off") + ", skip-near " + (SCANNER.skipNear ? "on (" + SCANNER.skippedNear() + " skipped last scan)" : "off")
+            + ", mobs " + (SCANNER.mobs ? "on" : "off") + ", geode targets " + GeodeTargets.chunks.size() + ", amethyst " + (SCANNER.amethyst ? "on" : "off") + ", terrain " + (SCANNER.terrain ? "on" : "off") + ", skip-near " + (SCANNER.skipNear ? "on (" + SCANNER.skippedNear() + " skipped last scan)" : "off")
             + ", auto " + (auto ? "on" : "off") + ".");
         return 1;
     }
@@ -145,10 +153,11 @@ public class KelpHuntClient implements ClientModInitializer {
         }
         try {
             java.nio.file.Path file = FabricLoader.getInstance().getGameDir().resolve("kelphunt-candidates.csv");
-            StringBuilder sb = new StringBuilder("score,x,y,z,chunks,grown_pct,old_chunk,new_chunk,above_water,rough_seabed,patch_x,patch_z,amethyst_pct,cave_pct\n");
+            StringBuilder sb = new StringBuilder("score,x,y,z,chunks,grown_pct,old_chunk,new_chunk,above_water,rough_seabed,patch_x,patch_z,amethyst_pct,cave_pct,mobs,traders,trader_llamas,skeleton_horses\n");
             for (Cluster c : KelpData.clusters) {
                 sb.append(c.score()).append(',').append(c.x()).append(',').append(c.y()).append(',').append(c.z()).append(',')
-                  .append(c.chunks()).append(',').append(c.grownPct()).append(',').append(c.old()).append(',').append(c.fresh()).append(',').append(c.above()).append(',').append(c.rough()).append(',').append(c.spanX()).append(',').append(c.spanZ()).append(',').append(c.amethystPct()).append(',').append(c.cavePct()).append('\n');
+                  .append(c.chunks()).append(',').append(c.grownPct()).append(',').append(c.old()).append(',').append(c.fresh()).append(',').append(c.above()).append(',').append(c.rough()).append(',').append(c.spanX()).append(',').append(c.spanZ()).append(',').append(c.amethystPct()).append(',').append(c.cavePct()).append(',').append(c.mobs()).append(',').append(c.traders()).append(',')
+                  .append(c.llamas()).append(',').append(c.skelHorses()).append('\n');
             }
             java.nio.file.Files.writeString(file, sb.toString());
             say(src, "exported " + KelpData.clusters.size() + " spot(s) to kelphunt-candidates.csv in your game folder.");
