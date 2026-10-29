@@ -18,7 +18,7 @@ public final class MiniMapLink {
      * Waypoints we create are named "Amethyst High - ..." or "Kelp Low - ...". They are found again by symbol
      * ("A" or "K") plus that name prefix, so your own waypoints are never touched. "KH " is the old prefix.
      */
-    private static final String AMETHYST = "Amethyst ", KELP = "Kelp ", OLD = "KH ", GEODE = "Geode ", MOBS = "Mobs ";
+    private static final String AMETHYST = "Amethyst ", KELP = "Kelp ", OLD = "KH ", GEODE = "Geode ", MOBS = "Mobs ", CHESTS = "Chests ";
 
     private MiniMapLink() {}
 
@@ -31,17 +31,24 @@ public final class MiniMapLink {
 
     private static boolean isAmethyst(Cluster c) { return c.amethystPct() >= 0; }
 
+    /** Storage is the leading evidence: an unusually high container count and no kelp or amethyst measured. */
+    private static boolean isChestLed(Cluster c) {
+        return c.amethystPct() < 0 && c.grownPct() < 0 && c.chests() >= 12;
+    }
+
     /** Mob evidence is the only evidence: no kelp or amethyst was measured in the strongest chunk. */
     private static boolean isMobOnly(Cluster c) {
-        return c.amethystPct() < 0 && c.grownPct() < 0
+        return c.amethystPct() < 0 && c.grownPct() < 0 && c.chests() < 12
             && (c.traders() > 0 || c.llamas() > 0 || c.skelHorses() > 0 || c.mobs() >= 25);
     }
 
-    private static String symbolFor(Cluster c) { return isAmethyst(c) ? "A" : isMobOnly(c) ? "M" : "K"; }
+    private static String symbolFor(Cluster c) { return isAmethyst(c) ? "A" : isChestLed(c) ? "C" : isMobOnly(c) ? "M" : "K"; }
 
     /** e.g. "Amethyst High - 92 pct grown, caves 11 pct" or "Kelp Low - 84 pct grown, old chunk". */
     private static String nameFor(Cluster c) {
-        StringBuilder sb = new StringBuilder(isAmethyst(c) ? AMETHYST : isMobOnly(c) ? MOBS : KELP).append(labelFor(c.score())).append(" -");
+        StringBuilder sb = new StringBuilder(isAmethyst(c) ? AMETHYST : isChestLed(c) ? CHESTS : isMobOnly(c) ? MOBS : KELP).append(labelFor(c.score())).append(" -");
+        if (isChestLed(c)) sb.append(' ').append(c.chests()).append(" containers");
+        else if (c.chests() >= 12) sb.append(", ").append(c.chests()).append(" containers");
         boolean mobTags = false;
         if (isAmethyst(c)) {
             sb.append(' ').append(c.amethystPct()).append(" pct grown");
@@ -156,8 +163,8 @@ public final class MiniMapLink {
             String name = w.getName();
             String sym = w.getSymbol();
             boolean ours = name != null
-                && (("K".equals(sym) || "A".equals(sym) || "M".equals(sym))
-                        && (name.startsWith(AMETHYST) || name.startsWith(KELP) || name.startsWith(OLD) || name.startsWith(MOBS))
+                && (("K".equals(sym) || "A".equals(sym) || "M".equals(sym) || "C".equals(sym))
+                        && (name.startsWith(AMETHYST) || name.startsWith(KELP) || name.startsWith(OLD) || name.startsWith(MOBS) || name.startsWith(CHESTS))
                     || "G".equals(sym) && name.startsWith(GEODE));
             if (ours) mine.add(w);
         }

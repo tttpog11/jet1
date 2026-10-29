@@ -13,6 +13,10 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BarrelBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -43,6 +47,8 @@ public final class KelpScanner {
     private static final int ABOVE_BONUS = 15;
     private static final int ROUGH_BONUS = 10;
     private static final int MAX_CLUSTERS = 20;
+    /** Containers in one chunk before it counts as an unusual storage area. Natural sources (villages, strongholds, ruins) stay well below. */
+    private static final int CHEST_MIN = 12;
     /** Budding amethyst blocks / open faces needed before a chunk's geode is judged. */
     private static final int MIN_BUDDING = 3;
     private static final int MIN_OPEN_FACES = 6;
@@ -65,6 +71,8 @@ public final class KelpScanner {
     public boolean amethyst = true;
     /** Count mobs your client can currently see (wandering traders, trader llamas, skeleton horses, crowds). */
     public boolean mobs = true;
+    /** Flag chunks with an unusually high number of chests, barrels and shulker boxes. */
+    public boolean chests = true;
     private int skippedNear;
     public int skippedNear() { return skippedNear; }
 
@@ -204,16 +212,27 @@ public final class KelpScanner {
         boolean hasKelp = heads >= MIN_HEADS;
         boolean anomaly = above >= ABOVE_COLUMNS || rough;
         Amethyst am = amethyst ? scanAmethyst(level, chunk, pos) : null;
-        if (!hasKelp && !anomaly && am == null) return null;
+        int chestCount = 0;
+        long chestYSum = 0;
+        if (chests) {
+            for (BlockEntity be : chunk.getBlockEntities().values()) {
+                if (be instanceof ChestBlockEntity || be instanceof BarrelBlockEntity || be instanceof ShulkerBoxBlockEntity) {
+                    chestCount++;
+                    chestYSum += be.getBlockPos().getY();
+                }
+            }
+        }
+        boolean chestArea = chestCount >= CHEST_MIN;
+        if (!hasKelp && !anomaly && am == null && !chestArea) return null;
         boolean old = false, fresh = false;
         if (HAS_XAEROPLUS) {
             old = XaeroPlusLink.isOld(pos.x, pos.z, level.dimension());
             fresh = XaeroPlusLink.isNew(pos.x, pos.z, level.dimension());
         }
         return new ChunkReport(pos, hasKelp ? heads : 0, hasKelp ? (double) done / heads : 0,
-            hasKelp ? (int) (ySum / heads) : floorMean, 0, old, fresh, above, rough,
+            hasKelp ? (int) (ySum / heads) : chestArea ? (int) (chestYSum / chestCount) : floorMean, 0, old, fresh, above, rough,
             am == null ? 0 : am.budding(), am == null ? 0 : am.fill(), am == null ? 0 : am.avgY(), am == null ? 0 : am.avgX(), am == null ? 0 : am.avgZ(),
-            am == null ? 0 : am.cavePct(), 0, 0, 0, 0);
+            am == null ? 0 : am.cavePct(), 0, 0, 0, 0, chestArea ? chestCount : 0);
     }
 
     /** Turns mob evidence off or on; off strips it from existing results. Takes effect fully on the next scan. */
@@ -264,10 +283,18 @@ public final class KelpScanner {
             ChunkReport r = reports.get(pos);
             if (r == null) {
                 int y = s.yN > 0 ? (int) (s.ySum / s.yN) : 0;
-                r = new ChunkReport(pos, 0, 0, y, 0, false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                r = new ChunkReport(pos, 0, 0, y, 0, false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
             }
             reports.put(pos, r.withMobs(s.mobs, s.traders, s.llamas, s.skel));
         }
+    }
+
+    /** 12+ containers in a chunk +15, 30+ +30, 60+ +45. */
+    private static int chestBonus(ChunkReport r) {
+        if (r.chests() >= 60) return 45;
+        if (r.chests() >= 30) return 30;
+        if (r.chests() >= CHEST_MIN) return 15;
+        return 0;
     }
 
     /** Wandering trader +25 (or trader llama alone +10), skeleton horse +15, 25+ mobs in a chunk +10, 60+ +20. */
@@ -391,7 +418,7 @@ public final class KelpScanner {
             score = Math.min(100, score);
             if (e.getValue().fresh()) score = (int) Math.round(score * NEW_CHUNK_FACTOR);
             else if (e.getValue().old()) score = Math.min(100, score + OLD_CHUNK_BONUS);
-            score = Math.min(100, score + mobBonus(r));
+            score = Math.min(100, score + mobBonus(r) + chestBonus(r));
             ChunkReport scored = e.getValue().withScore(score);
             e.setValue(scored);
             if (score > 0) positives.put(e.getKey().toLong(), scored);
@@ -455,7 +482,7 @@ public final class KelpScanner {
                 score, members.size(), peak.heads() >= MIN_HEADS ? (int) Math.round(peak.doneFraction() * 100) : -1,
                 peak.old(), peak.fresh(), peak.above() >= ABOVE_COLUMNS, peak.rough(), spanX, spanZ,
                 geode ? (int) Math.round(peak.amFill() * 100) : -1, geode ? peak.cavePct() : -1,
-                peak.mobs(), peak.traders(), peak.llamas(), peak.skelHorses()));
+                peak.mobs(), peak.traders(), peak.llamas(), peak.skelHorses(), peak.chests()));
         }
         out.sort(Comparator.comparingInt(Cluster::score).reversed());
         return out.size() > MAX_CLUSTERS ? new ArrayList<>(out.subList(0, MAX_CLUSTERS)) : out;

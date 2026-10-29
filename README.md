@@ -17,6 +17,13 @@ sees underground bases. It reads the block data your client already has and repo
 individual geode positions. Open cave space in the chunk adds up to +15 (natural caves count too, so it only nudges).
 The waypoint Y is the geode depth. Toggle with `/kelphunt amethyst`.
 
+## Storage areas
+Counts chests, trapped chests, barrels and shulker boxes per chunk (from the block data your client already has). Only chunks
+with 12 or more are kept, and only the count is stored, never individual positions. 12+ adds +15, 30+ +30, 60+ +45. Chunks with
+only this evidence get a `Chests ...` waypoint, e.g. `Chests High - 83 containers, 3x3 chunk patch`, centred on the patch.
+Natural sources (villages, strongholds, ruins, mineshafts) stay below the threshold, but a big public stash or storage hall looks
+the same as a base. `/kelphunt chests` toggles it. This is the signal closest to a stash finder.
+
 ## Mobs
 Counts mobs your client can currently see when a scan finishes (players excluded). A wandering trader adds +25 (a trader
 llama alone +10), a skeleton horse +15, and 25+ mobs in one chunk +10 (60+ gives +20). A chunk with only mob evidence gets a
@@ -49,6 +56,7 @@ Natural things (monuments, shipwrecks, ruins, islands) can trigger these too, so
 - `/kelphunt auto`           toggle rescanning every ~15 s while you fly around
 - `/kelphunt min <score>`    minimum score for a waypoint (default 10)
 - `/kelphunt skipnear`      toggle skipping chunks inside your own simulation distance
+- `/kelphunt chests`        toggle the storage-area evidence (on by default)
 - `/kelphunt mobs`          toggle the mob evidence (on by default)
 - `/kelphunt amethyst`      toggle amethyst + cave evidence (on by default)
 - `/kelphunt terrain`       toggle the seabed / above-water evidence (off by default; only helps with surface builds)
