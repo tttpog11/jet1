@@ -316,16 +316,27 @@ public final class OrePredictor {
             accessor = isNether ? LevelHeightAccessor.create(0, 256) : LevelHeightAccessor.create(-64, 384);
         }
 
-        /** First free Y above the top solid block of the column (OCEAN_FLOOR_WG). */
-        int height(int x, int z) {
-            long k = (((long) x) << 32) ^ (z & 0xFFFFFFFFL);
+        private int grid(int gx, int gz) {
+            long k = (((long) gx) << 32) ^ (gz & 0xFFFFFFFFL);
             Integer h = heights.get(k);
             if (h == null) {
-                if (heights.size() > 600_000) heights.clear();
-                h = generator.getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, accessor, randomState);
+                if (heights.size() > 300_000) heights.clear();
+                h = generator.getBaseHeight(gx << 2, gz << 2, Heightmap.Types.OCEAN_FLOOR_WG, accessor, randomState);
                 heights.put(k, h);
             }
             return h;
+        }
+
+        /**
+         * First free Y above the top solid block of the column (OCEAN_FLOOR_WG). Sampled every
+         * 4 blocks and interpolated: the exact column lookup is far too slow to run per block.
+         */
+        int height(int x, int z) {
+            int gx = Math.floorDiv(x, 4), gz = Math.floorDiv(z, 4);
+            double fx = (x - gx * 4) / 4.0, fz = (z - gz * 4) / 4.0;
+            double h00 = grid(gx, gz), h10 = grid(gx + 1, gz), h01 = grid(gx, gz + 1), h11 = grid(gx + 1, gz + 1);
+            double h = (h00 * (1 - fx) + h10 * fx) * (1 - fz) + (h01 * (1 - fx) + h11 * fx) * fz;
+            return (int) Math.round(h);
         }
     }
 
@@ -355,6 +366,8 @@ public final class OrePredictor {
     }
 
     private static boolean airAdjacent(Run run, int x, int y, int z) {
+        // buried well below the surface: skip the neighbour lookups (cliffs steeper than this are rare)
+        if (y < surface(run, x, z) - 6) return false;
         return y + 1 >= surface(run, x, z)
                 || y >= surface(run, x + 1, z) || y >= surface(run, x - 1, z)
                 || y >= surface(run, x, z + 1) || y >= surface(run, x, z - 1);

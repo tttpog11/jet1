@@ -35,6 +35,8 @@ public class MenuScreen extends Screen {
         }
     }
 
+    // categories: the sidebar first lists categories, opening one shows its modules
+    private static boolean inCategory = false;
     private Module selected = Module.FINDER;
     private EditBox seedBox;
     private int px, py, ps;
@@ -63,7 +65,7 @@ public class MenuScreen extends Screen {
                 // incomplete input like "-" is fine, keep the old seed
             }
         });
-        seedBox.visible = selected == Module.FINDER;
+        seedBox.visible = inCategory && selected == Module.FINDER;
         addRenderableWidget(seedBox);
     }
 
@@ -250,6 +252,7 @@ public class MenuScreen extends Screen {
     private List<Row> rows() {
         OreConfig c = OreConfig.get();
         List<Row> rows = new ArrayList<>();
+        if (!inCategory) return rows;
         switch (selected) {
             case FINDER -> {
                 rows.add(new LabelRow("World seed"));
@@ -317,7 +320,7 @@ public class MenuScreen extends Screen {
     }
 
     private int moduleY(int i) {
-        return py + 24 + i * 23;
+        return py + 48 + i * 21;
     }
 
 
@@ -373,7 +376,7 @@ public class MenuScreen extends Screen {
             }
         }
 
-        drawSaturn(g, px + SIDE_W / 2, py + (24 + 6 * 23 + ps - 24) / 2 + 2);
+        drawSaturn(g, px + SIDE_W / 2, py + (48 + 6 * 21 + ps - 24) / 2 + 2);
 
         // borders with a faint outer glow
         g.fill(px - 1, py - 1, px + ps + 1, py, 0x55B58CFF);
@@ -433,31 +436,51 @@ public class MenuScreen extends Screen {
         g.drawString(font, "OreSeer", px + 8, py + 9, 0xFFE6D6FF);
 
         // modules
-        Module[] mods = Module.values();
-        for (int i = 0; i < mods.length; i++) {
-            Module m = mods[i];
-            int bx = px + 6, by = moduleY(i), bw = SIDE_W - 12, bh = 20;
-            boolean on = isOn(m);
+        if (!inCategory) {
+            // category list
+            int bx = px + 6, by = py + 26, bw = SIDE_W - 12, bh = 24;
             boolean hover = in(mouseX, mouseY, bx, by, bw, bh);
-            int top = on ? (hover ? 0xE0B07CFF : 0xC09B5CFF) : (hover ? 0xA0402A80 : 0x7018104A);
-            int bot = on ? (hover ? 0xE06A3DD0 : 0xC05A2FB8) : (hover ? 0xA0281860 : 0x700C0830);
-            g.fillGradient(bx, by, bx + bw, by + bh, top, bot);
-            if (m == selected) g.fill(bx, by, bx + 2, by + bh, 0xFFFFFFFF);
-            g.drawString(font, m.label, bx + 8, by + 6, on ? C_TEXT : C_DIM);
-        }
-        g.drawString(font, "LMB: toggle", px + 8, py + ps - 24, C_DIM);
-        g.drawString(font, "RMB: configure", px + 8, py + ps - 13, C_DIM);
+            g.fillGradient(bx, by, bx + bw, by + bh, hover ? 0xE0B07CFF : 0xC09B5CFF, hover ? 0xE06A3DD0 : 0xC05A2FB8);
+            g.drawString(font, "Ore Predictor", bx + 8, by + 8, C_TEXT);
+            g.drawString(font, ">", bx + bw - 12, by + 8, C_TEXT);
+            g.drawString(font, "Categories", px + 8, py + ps - 13, C_DIM);
 
-        // settings of the selected module
-        g.drawString(font, selected.label + " settings", mainX(), py + 9, C_TEXT);
-        seedBox.visible = selected == Module.FINDER;
+            g.drawString(font, "Categories", mainX(), py + 9, C_TEXT);
+            g.drawString(font, "Ore Predictor", mainX(), py + 34, 0xFFE6D6FF);
+            g.drawString(font, "Find ores from your world seed:", mainX(), py + 48, C_DIM);
+            g.drawString(font, "overworld, deepslate and nether.", mainX(), py + 59, C_DIM);
+            g.drawString(font, "Click it on the left to open.", mainX(), py + 78, C_DIM);
+        } else {
+            int bx = px + 6, by = py + 24, bw = SIDE_W - 12, bh = 18;
+            boolean hover = in(mouseX, mouseY, bx, by, bw, bh);
+            g.fill(bx, by, bx + bw, by + bh, hover ? 0xA0402A80 : 0x7018104A);
+            g.drawString(font, "< Ore Predictor", bx + 6, by + 5, 0xFFE6D6FF);
+
+            Module[] mods = Module.values();
+            for (int i = 0; i < mods.length; i++) {
+                Module m = mods[i];
+                int mx0 = px + 6, my0 = moduleY(i), mw = SIDE_W - 12, mh = 18;
+                boolean on = isOn(m);
+                boolean mh2 = in(mouseX, mouseY, mx0, my0, mw, mh);
+                int top = on ? (mh2 ? 0xE0B07CFF : 0xC09B5CFF) : (mh2 ? 0xA0402A80 : 0x7018104A);
+                int bot = on ? (mh2 ? 0xE06A3DD0 : 0xC05A2FB8) : (mh2 ? 0xA0281860 : 0x700C0830);
+                g.fillGradient(mx0, my0, mx0 + mw, my0 + mh, top, bot);
+                if (m == selected) g.fill(mx0, my0, mx0 + 2, my0 + mh, 0xFFFFFFFF);
+                g.drawString(font, m.label, mx0 + 8, my0 + 5, on ? C_TEXT : C_DIM);
+            }
+            g.drawString(font, "LMB: toggle", px + 8, py + ps - 24, C_DIM);
+            g.drawString(font, "RMB: configure", px + 8, py + ps - 13, C_DIM);
+
+            g.drawString(font, selected.label + " settings", mainX(), py + 9, C_TEXT);
+        }
+        seedBox.visible = inCategory && selected == Module.FINDER;
         int y = rowsTop();
         for (Row r : rows()) {
             r.draw(this, g, mainX(), y, mainW(), mouseX, mouseY);
             y += r.h;
         }
 
-        if (selected == Module.FINDER) drawStatus(g);
+        if (inCategory && selected == Module.FINDER) drawStatus(g);
 
         super.render(g, mouseX, mouseY, partialTick); // widgets (seed box) on top
     }
@@ -474,7 +497,7 @@ public class MenuScreen extends Screen {
             line1 = "Error: " + font.plainSubstrByWidth(OreScanner.error, mainW() - 34);
             col = 0xFFFF9090;
         } else {
-            line1 = "Chunks " + OreScanner.cachedChunks() + "  (" + OreScanner.pendingChunks() + " queued)";
+            line1 = "Chunks " + OreScanner.cachedChunks() + " (" + OreScanner.pendingChunks() + " queued)  Veins " + OreScanner.visible.size();
         }
         g.drawString(font, line1, x, y, col);
 
@@ -497,9 +520,19 @@ public class MenuScreen extends Screen {
         double my = event.y();
         int button = event.button();
 
+        if (!inCategory) {
+            if (in(mx, my, px + 6, py + 26, SIDE_W - 12, 24)) inCategory = true;
+            return true;
+        }
+        if (in(mx, my, px + 6, py + 24, SIDE_W - 12, 18)) {
+            inCategory = false;
+            seedBox.setFocused(false);
+            return true;
+        }
+
         Module[] mods = Module.values();
         for (int i = 0; i < mods.length; i++) {
-            if (in(mx, my, px + 6, moduleY(i), SIDE_W - 12, 20)) {
+            if (in(mx, my, px + 6, moduleY(i), SIDE_W - 12, 18)) {
                 if (button == 0) {
                     toggle(mods[i]);
                 } else if (button == 1) {

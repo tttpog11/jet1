@@ -17,10 +17,18 @@ public final class OreHud {
         OreConfig c = OreConfig.get();
         if (!c.finderEnabled || mc.player == null || mc.options.hideGui) return;
         List<OrePredictor.Blob> blobs = OreScanner.visible;
-        if (blobs.isEmpty()) return;
-
         int w = g.guiWidth();
         int h = g.guiHeight();
+        if (blobs.isEmpty()) {
+            String msg;
+            if (OreScanner.error != null) msg = "OreSeer error: " + OreScanner.error;
+            else if (OreScanner.wrongDimension) msg = "OreSeer: Overworld / Nether only";
+            else if (OreScanner.pendingChunks() > 0 || OreScanner.cachedChunks() == 0)
+                msg = "OreSeer: scanning... (" + OreScanner.cachedChunks() + " chunks done)";
+            else msg = "OreSeer: no matching veins in range (check ore ticks / height range)";
+            g.drawString(mc.font, msg, w - mc.font.width(msg) - 6, 6, 0xFFC9BEFF);
+            return;
+        }
 
         if (c.markersEnabled) drawMarkers(g, mc, c, blobs, partial, w, h);
         if (c.listEnabled) drawList(g, mc, c, blobs, w);

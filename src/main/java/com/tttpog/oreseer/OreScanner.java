@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
 public final class OreScanner {
     private static final ConcurrentHashMap<Long, List<OrePredictor.Blob>> CACHE = new ConcurrentHashMap<>();
     private static final Set<Long> PENDING = ConcurrentHashMap.newKeySet();
-    private static final ExecutorService POOL = Executors.newFixedThreadPool(2, r -> {
+    private static final ExecutorService POOL = Executors.newFixedThreadPool(Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors() - 1)), r -> {
         Thread t = new Thread(r, "OreSeer-scan");
         t.setDaemon(true);
         return t;
