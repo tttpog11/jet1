@@ -18,7 +18,11 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.biome.FeatureSorter;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 import net.minecraft.world.level.biome.OverworldBiomeBuilder;
+import net.minecraft.world.level.LevelHeightAccessor;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
@@ -83,7 +87,8 @@ public final class OrePredictor {
     private static Ctx nether;
     private static Climate.ParameterList<Holder<Biome>> overworldBiomes;
     private static Climate.ParameterList<Holder<Biome>> netherBiomes;
-    private static final java.util.Map<String, Climate.Sampler> SAMPLERS = new java.util.HashMap<>();
+    private static World world;
+    private static String worldKey = "";
 
     private OrePredictor() {}
 
@@ -294,21 +299,65 @@ public final class OrePredictor {
         }
     }
 
-    private static Holder<Biome> biomeAt(boolean isNether, long seed, int x, int y, int z) {
-        String key = (isNether ? "n" : "o") + seed;
-        Climate.Sampler sampler;
-        synchronized (SAMPLERS) {
-            sampler = SAMPLERS.get(key);
-            if (sampler == null) {
-                SAMPLERS.clear();
-                RandomState rs = RandomState.create(lookup,
-                        isNether ? NoiseGeneratorSettings.NETHER : NoiseGeneratorSettings.OVERWORLD, seed);
-                sampler = rs.sampler();
-                SAMPLERS.put(key, sampler);
-            }
+    /** Seed-specific noise state: biome sampler plus a cached terrain height lookup. */
+    private static final class World {
+        final Climate.Sampler sampler;
+        final RandomState randomState;
+        final NoiseBasedChunkGenerator generator;
+        final LevelHeightAccessor accessor;
+        final java.util.concurrent.ConcurrentHashMap<Long, Integer> heights = new java.util.concurrent.ConcurrentHashMap<>();
+
+        World(boolean isNether, long seed, Climate.ParameterList<Holder<Biome>> biomes) {
+            var key = isNether ? NoiseGeneratorSettings.NETHER : NoiseGeneratorSettings.OVERWORLD;
+            randomState = RandomState.create(lookup, key, seed);
+            sampler = randomState.sampler();
+            generator = new NoiseBasedChunkGenerator(MultiNoiseBiomeSource.createFromList(biomes),
+                    lookup.lookupOrThrow(Registries.NOISE_SETTINGS).getOrThrow(key));
+            accessor = isNether ? LevelHeightAccessor.create(0, 256) : LevelHeightAccessor.create(-64, 384);
         }
+
+        /** First free Y above the top solid block of the column (OCEAN_FLOOR_WG). */
+        int height(int x, int z) {
+            long k = (((long) x) << 32) ^ (z & 0xFFFFFFFFL);
+            Integer h = heights.get(k);
+            if (h == null) {
+                if (heights.size() > 600_000) heights.clear();
+                h = generator.getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, accessor, randomState);
+                heights.put(k, h);
+            }
+            return h;
+        }
+    }
+
+    private static synchronized World world(boolean isNether, long seed) {
+        String key = (isNether ? "n" : "o") + seed;
+        if (world == null || !key.equals(worldKey)) {
+            world = new World(isNether, seed, isNether ? netherBiomes : overworldBiomes);
+            worldKey = key;
+        }
+        return world;
+    }
+
+    private static Holder<Biome> biomeAt(boolean isNether, long seed, int x, int y, int z) {
+        World w = world(isNether, seed);
         Climate.ParameterList<Holder<Biome>> list = isNether ? netherBiomes : overworldBiomes;
-        return list.findValue(sampler.sample(x >> 2, y >> 2, z >> 2));
+        return list.findValue(w.sampler.sample(x >> 2, y >> 2, z >> 2));
+    }
+
+    /** Terrain height used by the ore feature checks; nether is treated as solid up to its roof. */
+    private static int surface(Run run, int x, int z) {
+        if (run.nether) return 128;
+        try {
+            return world(false, run.seed).height(x, z);
+        } catch (Throwable t) {
+            return 1000; // unknown: assume solid
+        }
+    }
+
+    private static boolean airAdjacent(Run run, int x, int y, int z) {
+        return y + 1 >= surface(run, x, z)
+                || y >= surface(run, x + 1, z) || y >= surface(run, x - 1, z)
+                || y >= surface(run, x, z + 1) || y >= surface(run, x, z - 1);
     }
 
     // ---- height providers (mirrors the vanilla classes, anchors resolved per dimension) ----
@@ -433,6 +482,21 @@ public final class OrePredictor {
         int horiz = 2 * (Mth.ceil(f1) + i);
         int vert = 2 * (2 + i);
 
+        // OreFeature#place: the whole vein is skipped when it lies entirely above the terrain
+        if (!run.nether) {
+            boolean anyColumn = false;
+            scan:
+            for (int cxx = minX; cxx <= minX + horiz; cxx++) {
+                for (int czz = minZ; czz <= minZ + horiz; czz++) {
+                    if (minY <= surface(run, cxx, czz)) {
+                        anyColumn = true;
+                        break scan;
+                    }
+                }
+            }
+            if (!anyColumn) return new ArrayList<>();
+        }
+
         BitSet seen = new BitSet(horiz * vert * horiz);
         double[] a = new double[size * 4];
         for (int k = 0; k < size; k++) {
@@ -466,7 +530,6 @@ public final class OrePredictor {
         }
 
         List<Long> blocks = new ArrayList<>();
-        boolean rollAir = g.discard() > 0.0F && g.discard() < 1.0F;
         for (int j = 0; j < size; j++) {
             double rad = a[j * 4 + 3];
             if (rad < 0.0D) continue;
@@ -491,9 +554,15 @@ public final class OrePredictor {
                             int idx = px - minX + (py - minY) * horiz + (pz - minZ) * horiz * vert;
                             if (!seen.get(idx)) {
                                 seen.set(idx);
-                                // canPlaceOre: the air-exposure roll happens once per valid block
-                                if (rollAir) r.nextFloat();
-                                blocks.add(BlockPos.asLong(px, py, pz));
+                                // air above the terrain can't be replaced: no roll, no ore
+                                if (!run.nether && py >= surface(run, px, pz)) continue;
+                                // canPlaceOre / shouldSkipAirCheck
+                                float chance = g.discard();
+                                boolean put;
+                                if (chance <= 0.0F) put = true;
+                                else if (chance >= 1.0F) put = run.nether || !airAdjacent(run, px, py, pz);
+                                else put = r.nextFloat() >= chance || run.nether || !airAdjacent(run, px, py, pz);
+                                if (put) blocks.add(BlockPos.asLong(px, py, pz));
                             }
                         }
                     }
