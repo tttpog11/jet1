@@ -17,7 +17,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.14
+          gradle-version: current
 
       - name: Build
         run: |
@@ -34,4 +34,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: oreseer-mod
-          path: build/libs/*.jar
+          path: build/libs/oreseer-*.jar

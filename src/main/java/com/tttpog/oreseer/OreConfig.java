@@ -2,12 +2,10 @@ package com.tttpog.oreseer;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import net.neoforged.fml.loading.FMLPaths;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -22,7 +20,14 @@ public final class OreConfig {
     public boolean finderEnabled = true;
     public long seed = 6608149111735331168L;
     public int radius = 6; // chunks
-    public Set<String> ores = new LinkedHashSet<>(List.of("diamond"));
+    public int minY = -64;
+    public int maxY = 128;
+    public Set<String> ores = new LinkedHashSet<>(List.of("diamond", "deepslate_diamond"));
+
+    // ore group modules
+    public boolean overworldEnabled = true;
+    public boolean deepslateEnabled = true;
+    public boolean netherEnabled = true;
 
     // Markers module
     public boolean markersEnabled = true;
@@ -40,7 +45,7 @@ public final class OreConfig {
     }
 
     private static Path path() {
-        return FMLPaths.CONFIGDIR.get().resolve("oreseer.json");
+        return FabricLoader.getInstance().getConfigDir().resolve("oreseer.json");
     }
 
     private static OreConfig load() {
@@ -71,16 +76,31 @@ public final class OreConfig {
 
     private void clamp() {
         radius = Math.max(1, Math.min(24, radius));
+        minY = Math.max(-64, Math.min(320, minY));
+        maxY = Math.max(-64, Math.min(320, maxY));
+        if (minY > maxY) minY = maxY;
         markerMaxDist = Math.max(32, Math.min(512, markerMaxDist));
         markerSize = Math.max(3, Math.min(12, markerSize));
         listSize = Math.max(3, Math.min(15, listSize));
     }
 
-    public EnumSet<OreType> wantedTypes() {
+    public boolean groupEnabled(OreType.Group g) {
+        return switch (g) {
+            case OVERWORLD -> overworldEnabled;
+            case DEEPSLATE -> deepslateEnabled;
+            case NETHER -> netherEnabled;
+        };
+    }
+
+    /** Ore types to simulate for the given dimension (nether ores only in the nether, the rest only above). */
+    public EnumSet<OreType> wantedTypes(boolean nether) {
         EnumSet<OreType> set = EnumSet.noneOf(OreType.class);
         for (String s : ores) {
             OreType t = OreType.byId(s);
-            if (t != null) set.add(t);
+            if (t == null) continue;
+            if ((t.group == OreType.Group.NETHER) != nether) continue;
+            if (!groupEnabled(t.group)) continue;
+            set.add(t);
         }
         return set;
     }
@@ -91,12 +111,5 @@ public final class OreConfig {
 
     public void toggleOre(OreType t) {
         if (!ores.remove(t.id)) ores.add(t.id);
-    }
-
-    /** Anything that changes the simulated result (not the radius). */
-    public String signature() {
-        List<String> sorted = new ArrayList<>(ores);
-        Collections.sort(sorted);
-        return seed + "|" + String.join(",", sorted);
     }
 }

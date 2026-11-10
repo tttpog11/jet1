@@ -1,45 +1,35 @@
 package com.tttpog.oreseer;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.common.NeoForge;
+import net.minecraft.resources.Identifier;
 
-@Mod(value = OreSeer.MODID, dist = Dist.CLIENT)
-public class OreSeer {
+public class OreSeer implements ClientModInitializer {
     public static final String MODID = "oreseer";
 
     private static KeyMapping menuKey;
 
-    public OreSeer(IEventBus modBus, ModContainer container) {
+    @Override
+    public void onInitializeClient() {
         OreConfig.get();
-        modBus.addListener(OreSeer::registerKeys);
-        NeoForge.EVENT_BUS.addListener(OreSeer::onTick);
-        NeoForge.EVENT_BUS.addListener(OreSeer::onGui);
-    }
+        menuKey = KeyMappingHelper.registerKeyMapping(
+                new KeyMapping("key.oreseer.menu", InputConstants.KEY_RSHIFT, KeyMapping.Category.MISC));
 
-    private static void registerKeys(RegisterKeyMappingsEvent event) {
-        menuKey = new KeyMapping("key.oreseer.menu", InputConstants.KEY_RSHIFT, KeyMapping.Category.MISC);
-        event.register(menuKey);
-    }
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (menuKey.consumeClick()) {
+                if (client.screen == null) client.setScreen(new MenuScreen());
+            }
+            OreScanner.tick(client);
+        });
 
-    private static void onTick(ClientTickEvent.Post event) {
-        Minecraft mc = Minecraft.getInstance();
-        while (menuKey != null && menuKey.consumeClick()) {
-            if (mc.screen == null) mc.setScreen(new MenuScreen());
-        }
-        OreScanner.tick(mc);
-    }
-
-    private static void onGui(RenderGuiEvent.Post event) {
-        Minecraft mc = Minecraft.getInstance();
-        OreHud.render(event.getGuiGraphics(), mc, mc.getDeltaTracker().getGameTimeDeltaPartialTick(true));
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MODID, "hud"), (graphics, delta) -> {
+            Minecraft mc = Minecraft.getInstance();
+            OreHud.render(graphics, mc, delta.getGameTimeDeltaPartialTick(true));
+        });
     }
 }

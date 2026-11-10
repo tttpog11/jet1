@@ -56,13 +56,17 @@ public final class OreScanner {
         OreConfig c = OreConfig.get();
         ClientLevel level = mc.level;
         LocalPlayer player = mc.player;
-        wrongDimension = level != null && level.dimension() != Level.OVERWORLD;
+        boolean nether = level != null && level.dimension() == Level.NETHER;
+        wrongDimension = level != null && !nether && level.dimension() != Level.OVERWORLD;
         if (level == null || player == null || !c.finderEnabled || wrongDimension) {
             if (!visible.isEmpty()) visible = List.of();
             return;
         }
 
-        String sig = c.signature();
+        final EnumSet<OreType> wanted = c.wantedTypes(nether);
+        StringBuilder sb = new StringBuilder().append(nether).append('|').append(c.seed);
+        for (OreType t : wanted) sb.append('|').append(t.id);
+        String sig = sb.toString();
         if (!sig.equals(lastSignature)) {
             lastSignature = sig;
             generation++;
@@ -85,7 +89,6 @@ public final class OreScanner {
         }
         final int gen = generation;
         final long seed = c.seed;
-        final EnumSet<OreType> wanted = c.wantedTypes();
         int submitted = 0;
         for (int[] o : offsets) {
             if (PENDING.size() >= 64 || submitted >= 24) break;
@@ -97,7 +100,7 @@ public final class OreScanner {
             POOL.execute(() -> {
                 try {
                     if (gen != generation) return;
-                    List<OrePredictor.Blob> result = OrePredictor.simulate(seed, cx, cz, wanted, level);
+                    List<OrePredictor.Blob> result = OrePredictor.simulate(nether, seed, cx, cz, wanted, level);
                     if (gen == generation) CACHE.put(key, result);
                 } catch (Throwable t) {
                     error = String.valueOf(t.getMessage() != null ? t.getMessage() : t);
@@ -114,11 +117,11 @@ public final class OreScanner {
                     || Math.abs(ChunkPos.getZ(k) - pcz) > radius + 2);
         }
 
-        if (ticks % 5 == 0) rebuildVisible(player, wanted, radius);
+        if (ticks % 5 == 0) rebuildVisible(player, level, c, wanted, radius);
         if (ticks % 20 == 0) checkAccuracy(level);
     }
 
-    private static void rebuildVisible(LocalPlayer player, EnumSet<OreType> wanted, int radius) {
+    private static void rebuildVisible(LocalPlayer player, ClientLevel level, OreConfig c, EnumSet<OreType> wanted, int radius) {
         Vec3 eye = player.getEyePosition();
         double max = (radius * 16.0 + 16.0);
         double max2 = max * max;
@@ -126,8 +129,9 @@ public final class OreScanner {
         for (List<OrePredictor.Blob> list : CACHE.values()) {
             for (OrePredictor.Blob b : list) {
                 if (!wanted.contains(b.type())) continue;
+                if (b.y() < c.minY || b.y() > c.maxY) continue;
                 double dx = b.x() - eye.x, dy = b.y() - eye.y, dz = b.z() - eye.z;
-                if (dx * dx + dy * dy + dz * dz <= max2) all.add(b);
+                if (dx * dx + dy * dy + dz * dz <= max2 && looksReal(level, b)) all.add(b);
             }
         }
         all.sort(Comparator.comparingDouble(b -> {
@@ -135,6 +139,23 @@ public final class OreScanner {
             return dx * dx + dy * dy + dz * dz;
         }));
         visible = all.size() > 600 ? new ArrayList<>(all.subList(0, 600)) : all;
+    }
+
+    /**
+     * Drops veins that are provably not there: if the client has the chunk loaded and the sampled
+     * blocks are all air (high-altitude coal over the surface, mined-out ore, caves), hide it.
+     */
+    private static boolean looksReal(ClientLevel level, OrePredictor.Blob b) {
+        long[] blocks = b.blocks();
+        int[] sample = {0, blocks.length / 2, blocks.length - 1};
+        int loaded = 0;
+        for (int i : sample) {
+            long l = blocks[i];
+            if (!level.hasChunk(BlockPos.getX(l) >> 4, BlockPos.getZ(l) >> 4)) continue;
+            loaded++;
+            if (!level.getBlockState(BlockPos.of(l)).isAir()) return true;
+        }
+        return loaded == 0;
     }
 
     /** Compares predicted blocks against what the client really has loaded. */

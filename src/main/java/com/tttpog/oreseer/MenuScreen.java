@@ -25,7 +25,8 @@ public class MenuScreen extends Screen {
     private static final int C_DIM = 0xFFB9B3D6;
 
     private enum Module {
-        FINDER("Ore Finder"), MARKERS("Markers"), LIST("Ore List");
+        FINDER("Finder"), OVERWORLD("Overworld Ores"), DEEPSLATE("Deepslate Ores"), NETHER("Nether Ores"),
+        MARKERS("Markers"), LIST("Ore List");
 
         final String label;
 
@@ -44,7 +45,7 @@ public class MenuScreen extends Screen {
 
     @Override
     protected void init() {
-        ps = Math.max(200, Math.min(270, Math.min(width, height) - 16));
+        ps = Math.max(230, Math.min(280, Math.min(width, height) - 16));
         px = (width - ps) / 2;
         py = (height - ps) / 2;
 
@@ -254,9 +255,12 @@ public class MenuScreen extends Screen {
                 rows.add(new LabelRow("World seed"));
                 rows.add(new SeedRow());
                 rows.add(new StepRow("Chunk radius", () -> c.radius, v -> c.radius = v, 1, 24, 1));
-                rows.add(new LabelRow("Blocks to find"));
-                for (OreType t : OreType.values()) rows.add(new OreRow(t));
+                rows.add(new StepRow("Min height (Y)", () -> c.minY, v -> c.minY = Math.min(v, c.maxY), -64, 320, 8));
+                rows.add(new StepRow("Max height (Y)", () -> c.maxY, v -> c.maxY = Math.max(v, c.minY), -64, 320, 8));
             }
+            case OVERWORLD -> addOreRows(rows, OreType.Group.OVERWORLD);
+            case DEEPSLATE -> addOreRows(rows, OreType.Group.DEEPSLATE);
+            case NETHER -> addOreRows(rows, OreType.Group.NETHER);
             case MARKERS -> {
                 rows.add(new ToggleRow("Show distance", () -> c.markerDistance, () -> c.markerDistance = !c.markerDistance));
                 rows.add(new StepRow("Max distance", () -> c.markerMaxDist, v -> c.markerMaxDist = v, 32, 512, 16));
@@ -265,6 +269,13 @@ public class MenuScreen extends Screen {
             case LIST -> rows.add(new StepRow("Entries", () -> c.listSize, v -> c.listSize = v, 3, 15, 1));
         }
         return rows;
+    }
+
+    private static void addOreRows(List<Row> rows, OreType.Group group) {
+        rows.add(new LabelRow("Blocks to find (x = vein size)"));
+        for (OreType t : OreType.values()) {
+            if (t.group == group) rows.add(new OreRow(t));
+        }
     }
 
     private int mainX() {
@@ -285,6 +296,9 @@ public class MenuScreen extends Screen {
         OreConfig c = OreConfig.get();
         return switch (m) {
             case FINDER -> c.finderEnabled;
+            case OVERWORLD -> c.overworldEnabled;
+            case DEEPSLATE -> c.deepslateEnabled;
+            case NETHER -> c.netherEnabled;
             case MARKERS -> c.markersEnabled;
             case LIST -> c.listEnabled;
         };
@@ -294,13 +308,16 @@ public class MenuScreen extends Screen {
         OreConfig c = OreConfig.get();
         switch (m) {
             case FINDER -> c.finderEnabled = !c.finderEnabled;
+            case OVERWORLD -> c.overworldEnabled = !c.overworldEnabled;
+            case DEEPSLATE -> c.deepslateEnabled = !c.deepslateEnabled;
+            case NETHER -> c.netherEnabled = !c.netherEnabled;
             case MARKERS -> c.markersEnabled = !c.markersEnabled;
             case LIST -> c.listEnabled = !c.listEnabled;
         }
     }
 
     private int moduleY(int i) {
-        return py + 26 + i * 24;
+        return py + 24 + i * 23;
     }
 
     // ---------------------------------------------------------------- rendering
@@ -353,7 +370,7 @@ public class MenuScreen extends Screen {
         String line1;
         int col = C_DIM;
         if (OreScanner.wrongDimension) {
-            line1 = "Overworld only";
+            line1 = "Overworld / Nether only";
             col = 0xFFFFB0B0;
         } else if (OreScanner.error != null) {
             line1 = "Error: " + font.plainSubstrByWidth(OreScanner.error, mainW() - 34);
@@ -397,7 +414,7 @@ public class MenuScreen extends Screen {
 
         int y = rowsTop();
         for (Row r : rows()) {
-            if (r.click(mainX(), y, mainW(), mx, my, button)) return true;
+            if (in(mx, my, mainX(), y, mainW(), r.h) && r.click(mainX(), y, mainW(), mx, my, button)) return true;
             y += r.h;
         }
         return true;

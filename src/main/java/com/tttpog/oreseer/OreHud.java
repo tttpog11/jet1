@@ -68,9 +68,9 @@ public final class OreHud {
             g.fill(x - half, y - half, x - half + 1, y + half, col);
             g.fill(x + half - 1, y - half, x + half, y + half, col);
 
-            if (c.markerDistance && labels < 40) {
+            if (labels < 40) {
                 labels++;
-                String t = (int) dist + "m";
+                String t = c.markerDistance ? "x" + b.count() + " " + (int) dist + "m" : "x" + b.count();
                 g.drawString(mc.font, t, x - mc.font.width(t) / 2, y + half + 2, col);
             }
         }

@@ -15,9 +15,9 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.util.valueproviders.IntProvider;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.FeatureSorter;
 import net.minecraft.world.level.biome.OverworldBiomeBuilder;
-import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
@@ -26,30 +26,30 @@ import net.minecraft.world.level.levelgen.placement.PlacementModifier;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
- * Re-runs vanilla's overworld ore decoration for a chunk from the world seed.
+ * Re-runs vanilla's ore decoration (overworld + nether) for a chunk from the world seed.
  *
  * Feature order, ore sizes and placement modifiers are read from vanilla's own worldgen data
- * (VanillaRegistries), and the random calls follow ChunkGenerator#applyBiomeDecoration and
- * OreFeature#place so the same seed lands the same blobs.
+ * (VanillaRegistries), and the random calls follow ChunkGenerator#applyBiomeDecoration,
+ * OreFeature#place and ScatteredOreFeature#place so the same seed lands the same blobs.
  *
  * Known approximations (terrain is not simulated):
- *  - every blob block is assumed to sit in solid stone/deepslate (no caves, no air exposure),
+ *  - every block is assumed to sit in solid rock (no caves, no air exposure),
  *  - the "is the whole blob above the surface" height check is skipped,
- *  - biome-restricted features (emerald, ...) are only evaluated where the chunk is loaded.
+ *  - biome-restricted features are only evaluated where the chunk is loaded.
  */
 public final class OrePredictor {
-    private static final int MIN_Y = -64;
-    private static final int MAX_Y = 319;
-    private static final int STEP = GenerationStep.Decoration.UNDERGROUND_ORES.ordinal();
+    // decoration steps that hold ore features: UNDERGROUND_ORES (6) and UNDERGROUND_DECORATION (7)
+    private static final int[] STEPS = {6, 7};
 
-    /** One predicted ore blob: centroid plus every block position (BlockPos#asLong). */
+    /** One predicted ore vein: centroid plus every block position (BlockPos#asLong). */
     public record Blob(OreType type, double x, double y, double z, long[] blocks) {
         public int count() {
             return blocks.length;
@@ -68,70 +68,103 @@ public final class OrePredictor {
 
     private record BiomeCheck() implements Mod {}
 
-    private record Gen(int index, OreType type, int size, float discard, List<Mod> mods,
-                       boolean universal, PlacedFeature feature) {}
+    private record Gen(int step, int index, boolean scattered, OreType stone, OreType deep, int size,
+                       float discard, List<Mod> mods, boolean universal, PlacedFeature feature) {}
 
-    private static List<Gen> gens;
+    private record Ctx(int minY, int maxY, List<Gen> gens) {}
+
+    private static HolderLookup.Provider lookup;
     private static HolderLookup<Biome> biomeLookup;
-    private static String initError;
+    private static Ctx overworld;
+    private static Ctx nether;
 
     private OrePredictor() {}
 
-    public static synchronized void init() {
-        if (gens != null) return;
-        if (initError != null) throw new IllegalStateException(initError);
+    private static synchronized Ctx ctx(boolean isNether) {
         try {
-            HolderLookup.Provider lookup = VanillaRegistries.createLookup();
-            biomeLookup = lookup.lookupOrThrow(Registries.BIOME);
+            if (lookup == null) {
+                lookup = VanillaRegistries.createLookup();
+                biomeLookup = lookup.lookupOrThrow(Registries.BIOME);
+            }
+            if (isNether) {
+                if (nether == null) nether = build(true);
+                return nether;
+            }
+            if (overworld == null) overworld = build(false);
+            return overworld;
+        } catch (Throwable t) {
+            throw new IllegalStateException("init failed: " + t, t);
+        }
+    }
 
-            // Same biome order as the overworld MultiNoiseBiomeSource.
-            LinkedHashSet<ResourceKey<Biome>> keys = new LinkedHashSet<>();
-            // addBiomes is protected, so call it reflectively
+    private static Ctx build(boolean isNether) throws Exception {
+        int minY = isNether ? 0 : -64;
+        int maxY = isNether ? 255 : 319;
+
+        LinkedHashSet<ResourceKey<Biome>> keys = new LinkedHashSet<>();
+        if (isNether) {
+            keys.add(Biomes.NETHER_WASTES);
+            keys.add(Biomes.SOUL_SAND_VALLEY);
+            keys.add(Biomes.CRIMSON_FOREST);
+            keys.add(Biomes.WARPED_FOREST);
+            keys.add(Biomes.BASALT_DELTAS);
+        } else {
+            // addBiomes is protected, so call it reflectively (same order as the overworld biome source)
             java.lang.reflect.Method add = OverworldBiomeBuilder.class
                     .getDeclaredMethod("addBiomes", java.util.function.Consumer.class);
             add.setAccessible(true);
             java.util.function.Consumer<com.mojang.datafixers.util.Pair<?, ResourceKey<Biome>>> sink =
                     pair -> keys.add(pair.getSecond());
             add.invoke(new OverworldBiomeBuilder(), sink);
-            List<Holder<Biome>> biomes = new ArrayList<>();
-            for (ResourceKey<Biome> k : keys) biomes.add(biomeLookup.getOrThrow(k));
+        }
+        List<Holder<Biome>> biomes = new ArrayList<>();
+        for (ResourceKey<Biome> k : keys) biomes.add(biomeLookup.getOrThrow(k));
 
-            List<FeatureSorter.StepFeatureData> steps = FeatureSorter.buildFeaturesPerStep(
-                    biomes, b -> b.value().getGenerationSettings().features(), false);
-            List<PlacedFeature> features = steps.get(STEP).features();
+        List<FeatureSorter.StepFeatureData> steps = FeatureSorter.buildFeaturesPerStep(
+                biomes, b -> b.value().getGenerationSettings().features(), false);
 
-            List<Gen> out = new ArrayList<>();
+        List<Gen> out = new ArrayList<>();
+        for (int step : STEPS) {
+            if (step >= steps.size()) continue;
+            List<PlacedFeature> features = steps.get(step).features();
             for (int i = 0; i < features.size(); i++) {
-                Gen g = parse(i, features.get(i), biomes);
+                Gen g = parse(step, i, features.get(i), biomes);
                 if (g != null) out.add(g);
             }
-            gens = out;
-        } catch (Throwable t) {
-            initError = "init failed: " + t;
-            throw new IllegalStateException(initError, t);
         }
+        return new Ctx(minY, maxY, out);
     }
 
-    private static Gen parse(int index, PlacedFeature pf, List<Holder<Biome>> biomes) {
+    private static Gen parse(int step, int index, PlacedFeature pf, List<Holder<Biome>> biomes) {
         try {
             ConfiguredFeature<?, ?> cf = pf.feature().value();
             Optional<JsonElement> enc = ConfiguredFeature.DIRECT_CODEC.encodeStart(JsonOps.INSTANCE, cf).result();
             if (enc.isEmpty()) return null;
             JsonObject root = enc.get().getAsJsonObject();
-            if (!"minecraft:ore".equals(root.get("type").getAsString())) return null;
+            String ftype = root.get("type").getAsString();
+            boolean scattered;
+            if ("minecraft:ore".equals(ftype)) scattered = false;
+            else if ("minecraft:scattered_ore".equals(ftype)) scattered = true;
+            else return null;
+
             JsonObject cfg = root.getAsJsonObject("config");
             int size = cfg.get("size").getAsInt();
             float discard = cfg.has("discard_chance_on_air_exposure")
                     ? cfg.get("discard_chance_on_air_exposure").getAsFloat() : 0f;
 
-            OreType type = null;
+            OreType stone = null, deep = null;
             JsonArray targets = cfg.getAsJsonArray("targets");
             for (JsonElement t : targets) {
                 String name = t.getAsJsonObject().getAsJsonObject("state").get("Name").getAsString();
-                type = OreType.fromBlockPath(name.substring(name.indexOf(':') + 1));
-                if (type != null) break;
+                OreType type = OreType.fromBlockPath(name.substring(name.indexOf(':') + 1));
+                if (type == null) continue;
+                if (type.group == OreType.Group.DEEPSLATE) {
+                    if (deep == null) deep = type;
+                } else if (stone == null) {
+                    stone = type;
+                }
             }
-            if (type == null) return null;
+            if (stone == null && deep == null) return null;
 
             List<Mod> mods = new ArrayList<>();
             for (PlacementModifier m : pf.placement()) {
@@ -158,51 +191,67 @@ public final class OrePredictor {
                     break;
                 }
             }
-            return new Gen(index, type, size, discard, mods, universal, pf);
+            return new Gen(step, index, scattered, stone, deep, size, discard, mods, universal, pf);
         } catch (Throwable t) {
             return null;
         }
     }
 
-    /** Predicts the ore blobs whose decoration origin chunk is (cx, cz). */
-    public static List<Blob> simulate(long seed, int cx, int cz, EnumSet<OreType> wanted, Level level) {
-        init();
-        List<Blob> out = new ArrayList<>();
+    /** Everything one chunk simulation needs. */
+    private static final class Run {
+        final Ctx ctx;
+        final WorldgenRandom rnd;
+        final List<Blob> out = new ArrayList<>();
+        final EnumSet<OreType> wanted;
+        final Level level;
+
+        Run(Ctx ctx, WorldgenRandom rnd, EnumSet<OreType> wanted, Level level) {
+            this.ctx = ctx;
+            this.rnd = rnd;
+            this.wanted = wanted;
+            this.level = level;
+        }
+    }
+
+    /** Predicts the ore veins whose decoration origin chunk is (cx, cz). */
+    public static List<Blob> simulate(boolean isNether, long seed, int cx, int cz, EnumSet<OreType> wanted, Level level) {
+        Ctx ctx = ctx(isNether);
         WorldgenRandom rnd = new WorldgenRandom(new XoroshiroRandomSource(0L));
         long decoration = rnd.setDecorationSeed(seed, cx << 4, cz << 4);
-        for (Gen g : gens) {
-            if (!wanted.contains(g.type())) continue;
-            rnd.setFeatureSeed(decoration, g.index(), STEP);
-            apply(g, 0, cx << 4, MIN_Y, cz << 4, rnd, out, level);
+        Run run = new Run(ctx, rnd, wanted, level);
+        for (Gen g : ctx.gens()) {
+            if (!(wanted.contains(g.stone()) || wanted.contains(g.deep()))) continue;
+            rnd.setFeatureSeed(decoration, g.index(), g.step());
+            apply(g, 0, cx << 4, ctx.minY(), cz << 4, run);
         }
-        return out;
+        return run.out;
     }
 
     // Mirrors the lazily flat-mapped Stream in PlacedFeature#placeWithContext: each position is
     // pushed through the remaining modifiers (and placed) before the next one is generated.
-    private static void apply(Gen g, int mi, int x, int y, int z, WorldgenRandom r, List<Blob> out, Level level) {
+    private static void apply(Gen g, int mi, int x, int y, int z, Run run) {
+        WorldgenRandom r = run.rnd;
         if (mi == g.mods().size()) {
-            Blob b = placeBlob(g, r, x, y, z);
-            if (b != null) out.add(b);
+            place(g, x, y, z, run);
             return;
         }
         Mod m = g.mods().get(mi);
         switch (m) {
             case Count c -> {
                 int n = c.provider().sample(r);
-                for (int i = 0; i < n; i++) apply(g, mi + 1, x, y, z, r, out, level);
+                for (int i = 0; i < n; i++) apply(g, mi + 1, x, y, z, run);
             }
             case InSquare ignored -> {
                 int nx = r.nextInt(16) + x;
                 int nz = r.nextInt(16) + z;
-                apply(g, mi + 1, nx, y, nz, r, out, level);
+                apply(g, mi + 1, nx, y, nz, run);
             }
-            case Height h -> apply(g, mi + 1, x, sampleHeight(h.json(), r), z, r, out, level);
+            case Height h -> apply(g, mi + 1, x, sampleHeight(h.json(), r, run.ctx), z, run);
             case Rarity ra -> {
-                if (r.nextFloat() < 1.0F / (float) ra.chance()) apply(g, mi + 1, x, y, z, r, out, level);
+                if (r.nextFloat() < 1.0F / (float) ra.chance()) apply(g, mi + 1, x, y, z, run);
             }
             case BiomeCheck ignored -> {
-                if (biomeAllows(g, x, y, z, level)) apply(g, mi + 1, x, y, z, r, out, level);
+                if (biomeAllows(g, x, y, z, run.level)) apply(g, mi + 1, x, y, z, run);
             }
         }
     }
@@ -220,30 +269,30 @@ public final class OrePredictor {
         }
     }
 
-    // ---- height providers (mirrors the vanilla classes, anchors resolved for the overworld) ----
+    // ---- height providers (mirrors the vanilla classes, anchors resolved per dimension) ----
 
-    private static int anchor(JsonElement e) {
+    private static int anchor(JsonElement e, Ctx c) {
         JsonObject o = e.getAsJsonObject();
         if (o.has("absolute")) return o.get("absolute").getAsInt();
-        if (o.has("above_bottom")) return MIN_Y + o.get("above_bottom").getAsInt();
-        if (o.has("below_top")) return MAX_Y - o.get("below_top").getAsInt();
+        if (o.has("above_bottom")) return c.minY() + o.get("above_bottom").getAsInt();
+        if (o.has("below_top")) return c.maxY() - o.get("below_top").getAsInt();
         throw new IllegalArgumentException("anchor " + o);
     }
 
-    private static int sampleHeight(JsonObject h, RandomSource r) {
+    private static int sampleHeight(JsonObject h, RandomSource r, Ctx c) {
         String type = h.get("type").getAsString().replace("minecraft:", "");
         switch (type) {
             case "constant":
-                return anchor(h.get("value"));
+                return anchor(h.get("value"), c);
             case "uniform": {
-                int lo = anchor(h.get("min_inclusive"));
-                int hi = anchor(h.get("max_inclusive"));
+                int lo = anchor(h.get("min_inclusive"), c);
+                int hi = anchor(h.get("max_inclusive"), c);
                 if (lo > hi) return lo;
                 return Mth.randomBetweenInclusive(r, lo, hi);
             }
             case "trapezoid": {
-                int lo = anchor(h.get("min_inclusive"));
-                int hi = anchor(h.get("max_inclusive"));
+                int lo = anchor(h.get("min_inclusive"), c);
+                int hi = anchor(h.get("max_inclusive"), c);
                 int plateau = h.has("plateau") ? h.get("plateau").getAsInt() : 0;
                 if (lo > hi) return lo;
                 int k = hi - lo;
@@ -253,16 +302,16 @@ public final class OrePredictor {
                 return lo + Mth.randomBetweenInclusive(r, 0, i1) + Mth.randomBetweenInclusive(r, 0, l);
             }
             case "biased_to_bottom": {
-                int lo = anchor(h.get("min_inclusive"));
-                int hi = anchor(h.get("max_inclusive"));
+                int lo = anchor(h.get("min_inclusive"), c);
+                int hi = anchor(h.get("max_inclusive"), c);
                 int inner = h.has("inner") ? h.get("inner").getAsInt() : 1;
                 if (hi - lo - inner + 1 <= 0) return lo;
                 int k = r.nextInt(hi - lo - inner + 1);
                 return r.nextInt(k + inner) + lo;
             }
             case "very_biased_to_bottom": {
-                int lo = anchor(h.get("min_inclusive"));
-                int hi = anchor(h.get("max_inclusive"));
+                int lo = anchor(h.get("min_inclusive"), c);
+                int hi = anchor(h.get("max_inclusive"), c);
                 int inner = h.has("inner") ? h.get("inner").getAsInt() : 1;
                 if (hi - lo - inner + 1 <= 0) return lo;
                 int k = Mth.randomBetweenInclusive(r, lo + inner, hi);
@@ -274,9 +323,58 @@ public final class OrePredictor {
         }
     }
 
-    // ---- OreFeature#place / #doPlace ----
+    // ---- feature placement ----
 
-    private static Blob placeBlob(Gen g, WorldgenRandom r, int ox, int oy, int oz) {
+    private static void place(Gen g, int ox, int oy, int oz, Run run) {
+        List<Long> blocks = g.scattered() ? scatter(g, run, ox, oy, oz) : blob(g, run, ox, oy, oz);
+        if (blocks.isEmpty()) return;
+
+        // split into stone / deepslate variants (deepslate below y = 0)
+        Map<OreType, List<Long>> buckets = new EnumMap<>(OreType.class);
+        for (long l : blocks) {
+            OreType t;
+            if (g.deep() != null && BlockPos.getY(l) < 0) t = g.deep();
+            else t = g.stone() != null ? g.stone() : g.deep();
+            buckets.computeIfAbsent(t, k -> new ArrayList<>()).add(l);
+        }
+        for (Map.Entry<OreType, List<Long>> e : buckets.entrySet()) {
+            if (!run.wanted.contains(e.getKey())) continue;
+            List<Long> list = e.getValue();
+            long[] arr = new long[list.size()];
+            double sx = 0, sy = 0, sz = 0;
+            for (int n = 0; n < arr.length; n++) {
+                long p = list.get(n);
+                arr[n] = p;
+                sx += BlockPos.getX(p) + 0.5;
+                sy += BlockPos.getY(p) + 0.5;
+                sz += BlockPos.getZ(p) + 0.5;
+            }
+            run.out.add(new Blob(e.getKey(), sx / arr.length, sy / arr.length, sz / arr.length, arr));
+        }
+    }
+
+    /** ScatteredOreFeature#place (ancient debris). */
+    private static List<Long> scatter(Gen g, Run run, int ox, int oy, int oz) {
+        WorldgenRandom r = run.rnd;
+        LinkedHashSet<Long> set = new LinkedHashSet<>();
+        int n = r.nextInt(g.size() + 1);
+        for (int j = 0; j < n; j++) {
+            int spread = Math.min(j, 7);
+            int dx = Math.round((r.nextFloat() - r.nextFloat()) * (float) spread);
+            int dy = Math.round((r.nextFloat() - r.nextFloat()) * (float) spread);
+            int dz = Math.round((r.nextFloat() - r.nextFloat()) * (float) spread);
+            int y = oy + dy;
+            if (y < run.ctx.minY() || y > run.ctx.maxY()) continue;
+            set.add(BlockPos.asLong(ox + dx, y, oz + dz));
+        }
+        return new ArrayList<>(set);
+    }
+
+    /** OreFeature#place / #doPlace. */
+    private static List<Long> blob(Gen g, Run run, int ox, int oy, int oz) {
+        WorldgenRandom r = run.rnd;
+        int minBuild = run.ctx.minY();
+        int maxBuild = run.ctx.maxY();
         int size = g.size();
         float f = r.nextFloat() * (float) Math.PI;
         float f1 = (float) size / 8.0F;
@@ -347,7 +445,7 @@ public final class OrePredictor {
                     if (nx * nx + ny * ny >= 1.0D) continue;
                     for (int pz = z0; pz <= z1; pz++) {
                         double nz = ((double) pz + 0.5D - cz) / rad;
-                        if (nx * nx + ny * ny + nz * nz < 1.0D && py >= MIN_Y && py <= MAX_Y) {
+                        if (nx * nx + ny * ny + nz * nz < 1.0D && py >= minBuild && py <= maxBuild) {
                             int idx = px - minX + (py - minY) * horiz + (pz - minZ) * horiz * vert;
                             if (!seen.get(idx)) {
                                 seen.set(idx);
@@ -360,23 +458,6 @@ public final class OrePredictor {
                 }
             }
         }
-        if (blocks.isEmpty()) return null;
-
-        long[] arr = new long[blocks.size()];
-        double sx = 0, sy = 0, sz = 0;
-        for (int n = 0; n < arr.length; n++) {
-            long p = blocks.get(n);
-            arr[n] = p;
-            sx += BlockPos.getX(p) + 0.5;
-            sy += BlockPos.getY(p) + 0.5;
-            sz += BlockPos.getZ(p) + 0.5;
-        }
-        return new Blob(g.type(), sx / arr.length, sy / arr.length, sz / arr.length, arr);
-    }
-
-    public static Set<OreType> supportedTypes() {
-        EnumSet<OreType> set = EnumSet.noneOf(OreType.class);
-        if (gens != null) for (Gen g : gens) set.add(g.type());
-        return set;
+        return blocks;
     }
 }

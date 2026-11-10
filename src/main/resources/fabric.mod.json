@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "oreseer",
+  "version": "${version}",
+  "name": "OreSeer",
+  "description": "Client-side seed based ore predictor with a translucent module menu.",
+  "authors": ["TTTpog11"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.tttpog.oreseer.OreSeer"]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
