@@ -1,0 +1,33 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.91'
+}
+
+version = mod_version
+group = 'com.tttpog.oreseer'
+
+base {
+    archivesName = 'oreseer'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+    version = neo_version
+
+    runs {
+        client {
+            client()
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

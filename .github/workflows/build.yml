@@ -1,0 +1,37 @@
+name: Build mod
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.14
+
+      - name: Build
+        run: |
+          set +e
+          gradle build --no-daemon 2>&1 | tee build.log
+          CODE=${PIPESTATUS[0]}
+          if [ "$CODE" != "0" ]; then
+            ERR=$(grep -E -A3 "error:|What went wrong|Execution failed" build.log | head -60 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=Build errors::$ERR"
+          fi
+          exit $CODE
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: oreseer-mod
+          path: build/libs/*.jar

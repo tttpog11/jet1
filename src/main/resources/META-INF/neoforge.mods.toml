@@ -1,0 +1,26 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="oreseer"
+version="1.0.0"
+displayName="OreSeer"
+authors="TTTpog11"
+description='''
+Client-side seed based ore predictor with a translucent module menu.
+'''
+
+[[dependencies.oreseer]]
+    modId="neoforge"
+    type="required"
+    versionRange="[21.11,)"
+    ordering="NONE"
+    side="CLIENT"
+
+[[dependencies.oreseer]]
+    modId="minecraft"
+    type="required"
+    versionRange="[1.21.11]"
+    ordering="NONE"
+    side="CLIENT"
