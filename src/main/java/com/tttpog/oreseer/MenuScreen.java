@@ -18,11 +18,11 @@ import java.util.function.IntSupplier;
  */
 public class MenuScreen extends Screen {
     private static final int SIDE_W = 100;
-    private static final int C_PANEL = 0x8A6A55F0;
+    private static final int C_PANEL = 0x8A6A55F0; // (unused, kept for reference)
     private static final int C_SIDE = 0x70161060;
-    private static final int C_EDGE = 0xFFB3A6FF;
+    private static final int C_EDGE = 0xFFB58CFF;
     private static final int C_TEXT = 0xFFFFFFFF;
-    private static final int C_DIM = 0xFFB9B3D6;
+    private static final int C_DIM = 0xFFC3B2EE;
 
     private enum Module {
         FINDER("Finder"), OVERWORLD("Overworld Ores"), DEEPSLATE("Deepslate Ores"), NETHER("Nether Ores"),
@@ -320,20 +320,117 @@ public class MenuScreen extends Screen {
         return py + 24 + i * 23;
     }
 
-    // ---------------------------------------------------------------- rendering
 
-    @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // panel
-        g.fill(px, py, px + ps, py + ps, C_PANEL);
-        g.fill(px, py, px + SIDE_W, py + ps, C_SIDE);
+    // ---------------------------------------------------------------- space theme
+
+    private static long lcg(long v) {
+        return v * 6364136223846793005L + 1442695040888963407L;
+    }
+
+    /** Soft glow: concentric translucent discs, clipped to the panel. */
+    private void glow(GuiGraphics g, int cx, int cy, int radius, int rgb) {
+        for (int ring = 0; ring < 5; ring++) {
+            int r = radius - ring * radius / 6;
+            for (int dy = -r; dy <= r; dy += 2) {
+                int w = (int) Math.sqrt((double) r * r - (double) dy * dy);
+                int y = cy + dy;
+                int x0 = Math.max(px + 1, cx - w), x1 = Math.min(px + ps - 1, cx + w);
+                if (y < py + 1 || y + 2 > py + ps - 1 || x0 >= x1) continue;
+                g.fill(x0, y, x1, y + 2, (0x12 << 24) | rgb);
+            }
+        }
+    }
+
+    private void drawSpace(GuiGraphics g) {
+        // deep violet sky, still see-through
+        g.fillGradient(px, py, px + ps, py + ps, 0xB0140A36, 0xB02A0F55);
+        glow(g, px + ps - 40, py + 50, 70, 0xB04DFF);
+        glow(g, px + SIDE_W + 30, py + ps - 30, 60, 0xFF4DC8);
+        glow(g, px + 30, py + ps / 2, 50, 0x4D6BFF);
+        // darker sidebar
+        g.fillGradient(px, py, px + SIDE_W, py + ps, 0x90070318, 0x90120830);
+
+        // twinkling stars
+        long t = System.currentTimeMillis();
+        long seed = 0x5EEDL;
+        for (int i = 0; i < 90; i++) {
+            seed = lcg(seed);
+            int sx = px + 2 + (int) ((seed >>> 33) % (ps - 4));
+            seed = lcg(seed);
+            int sy = py + 2 + (int) ((seed >>> 33) % (ps - 4));
+            seed = lcg(seed);
+            double phase = (seed >>> 40) % 628 / 100.0;
+            double tw = 0.5 + 0.5 * Math.sin(t / (500.0 + (i % 5) * 170.0) + phase);
+            int a = 0x40 + (int) (0xB0 * tw);
+            int col = (a << 24) | (i % 7 == 0 ? 0xFFD9F0 : i % 5 == 0 ? 0xD9C8FF : 0xFFFFFF);
+            g.fill(sx, sy, sx + 1, sy + 1, col);
+            if (i % 11 == 0) { // a few brighter stars get a little cross
+                int arm = (a / 2) << 24 | 0xFFFFFF;
+                g.fill(sx - 1, sy, sx, sy + 1, arm);
+                g.fill(sx + 1, sy, sx + 2, sy + 1, arm);
+                g.fill(sx, sy - 1, sx + 1, sy, arm);
+                g.fill(sx, sy + 1, sx + 1, sy + 2, arm);
+            }
+        }
+
+        drawSaturn(g, px + SIDE_W / 2, py + (24 + 6 * 23 + ps - 24) / 2 + 2);
+
+        // borders with a faint outer glow
+        g.fill(px - 1, py - 1, px + ps + 1, py, 0x55B58CFF);
+        g.fill(px - 1, py + ps, px + ps + 1, py + ps + 1, 0x55B58CFF);
+        g.fill(px - 1, py, px, py + ps, 0x55B58CFF);
+        g.fill(px + ps, py, px + ps + 1, py + ps, 0x55B58CFF);
         g.fill(px, py, px + ps, py + 1, C_EDGE);
         g.fill(px, py + ps - 1, px + ps, py + ps, C_EDGE);
         g.fill(px, py, px + 1, py + ps, C_EDGE);
         g.fill(px + ps - 1, py, px + ps, py + ps, C_EDGE);
-        g.fill(px + SIDE_W, py + 1, px + SIDE_W + 1, py + ps - 1, C_EDGE);
+        g.fill(px + SIDE_W, py + 1, px + SIDE_W + 1, py + ps - 1, 0x99B58CFF);
+    }
 
-        g.drawString(font, "OreSeer", px + 8, py + 9, C_TEXT);
+    /** Small pixel Saturn: back ring, banded planet, front ring. */
+    private void drawSaturn(GuiGraphics g, int cx, int cy) {
+        final int r = 9;
+        final double tilt = Math.toRadians(-18);
+        final double cos = Math.cos(tilt), sin = Math.sin(tilt);
+        final double[] radii = {20, 23, 26, 29};
+        final int[] ringCols = {0xE0D8B8F0, 0xC0A07CD0, 0xE0E6CFFF, 0x90B48CF0};
+
+        for (int pass = 0; pass < 2; pass++) { // 0 = behind the planet, 1 = in front
+            if (pass == 1) drawPlanet(g, cx, cy, r);
+            for (int k = 0; k < radii.length; k++) {
+                double rx = radii[k], ry = radii[k] * 0.28;
+                for (int i = 0; i < 90; i++) {
+                    double a = i * Math.PI * 2 / 90;
+                    boolean front = Math.sin(a) > 0;
+                    if (front != (pass == 1)) continue;
+                    double ex = Math.cos(a) * rx, ey = Math.sin(a) * ry;
+                    int x = cx + (int) Math.round(ex * cos - ey * sin);
+                    int y = cy + (int) Math.round(ex * sin + ey * cos);
+                    if (x < px + 2 || x > px + SIDE_W - 3) continue;
+                    g.fill(x, y, x + 1, y + 1, ringCols[k]);
+                }
+            }
+        }
+    }
+
+    private void drawPlanet(GuiGraphics g, int cx, int cy, int r) {
+        final int[] bands = {0xFFB9A2FF, 0xFFE2B8C8, 0xFFA07CE0, 0xFFD9A2B0, 0xFF8A66D0, 0xFFC8A8F0};
+        for (int dy = -r; dy <= r; dy++) {
+            int w = (int) Math.round(Math.sqrt((double) r * r - (double) dy * dy));
+            int col = bands[Math.floorMod((dy + r) / 3, bands.length)];
+            int dark = 0xFF000000 | ((col >> 17 & 0x7F) << 16) | ((col >> 9 & 0x7F) << 8) | (col >> 1 & 0x7F);
+            g.fill(cx - w, cy + dy, cx + w, cy + dy + 1, col);
+            g.fill(cx + w / 3, cy + dy, cx + w, cy + dy + 1, dark); // shaded side
+        }
+    }
+
+    // ---------------------------------------------------------------- rendering
+
+    @Override
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        drawSpace(g);
+
+        g.drawString(font, "OreSeer", px + 8, py + 9, 0xFFE6D6FF);
 
         // modules
         Module[] mods = Module.values();
@@ -342,8 +439,9 @@ public class MenuScreen extends Screen {
             int bx = px + 6, by = moduleY(i), bw = SIDE_W - 12, bh = 20;
             boolean on = isOn(m);
             boolean hover = in(mouseX, mouseY, bx, by, bw, bh);
-            int bg = on ? (hover ? 0xE08E80FF : 0xC07B6CFF) : (hover ? 0x90302A70 : 0x66101040);
-            g.fill(bx, by, bx + bw, by + bh, bg);
+            int top = on ? (hover ? 0xE0B07CFF : 0xC09B5CFF) : (hover ? 0xA0402A80 : 0x7018104A);
+            int bot = on ? (hover ? 0xE06A3DD0 : 0xC05A2FB8) : (hover ? 0xA0281860 : 0x700C0830);
+            g.fillGradient(bx, by, bx + bw, by + bh, top, bot);
             if (m == selected) g.fill(bx, by, bx + 2, by + bh, 0xFFFFFFFF);
             g.drawString(font, m.label, bx + 8, by + 6, on ? C_TEXT : C_DIM);
         }
