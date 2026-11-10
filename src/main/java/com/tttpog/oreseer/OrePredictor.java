@@ -16,8 +16,11 @@ import net.minecraft.util.valueproviders.IntProvider;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.biome.FeatureSorter;
 import net.minecraft.world.level.biome.OverworldBiomeBuilder;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
@@ -32,6 +35,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import com.mojang.datafixers.util.Pair;
 
 /**
  * Re-runs vanilla's ore decoration (overworld + nether) for a chunk from the world seed.
@@ -77,6 +81,9 @@ public final class OrePredictor {
     private static HolderLookup<Biome> biomeLookup;
     private static Ctx overworld;
     private static Ctx nether;
+    private static Climate.ParameterList<Holder<Biome>> overworldBiomes;
+    private static Climate.ParameterList<Holder<Biome>> netherBiomes;
+    private static final java.util.Map<String, Climate.Sampler> SAMPLERS = new java.util.HashMap<>();
 
     private OrePredictor() {}
 
@@ -102,15 +109,26 @@ public final class OrePredictor {
         int maxY = isNether ? 255 : 319;
 
         LinkedHashSet<ResourceKey<Biome>> keys = new LinkedHashSet<>();
+        List<Pair<Climate.ParameterPoint, Holder<Biome>>> points = new ArrayList<>();
         if (isNether) {
             keys.add(Biomes.NETHER_WASTES);
             keys.add(Biomes.SOUL_SAND_VALLEY);
             keys.add(Biomes.CRIMSON_FOREST);
             keys.add(Biomes.WARPED_FOREST);
             keys.add(Biomes.BASALT_DELTAS);
+            points.add(Pair.of(Climate.parameters(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F), biomeLookup.getOrThrow(Biomes.NETHER_WASTES)));
+            points.add(Pair.of(Climate.parameters(0.0F, -0.5F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F), biomeLookup.getOrThrow(Biomes.SOUL_SAND_VALLEY)));
+            points.add(Pair.of(Climate.parameters(0.4F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F), biomeLookup.getOrThrow(Biomes.CRIMSON_FOREST)));
+            points.add(Pair.of(Climate.parameters(0.0F, 0.5F, 0.0F, 0.0F, 0.0F, 0.0F, 0.375F), biomeLookup.getOrThrow(Biomes.WARPED_FOREST)));
+            points.add(Pair.of(Climate.parameters(-0.5F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.175F), biomeLookup.getOrThrow(Biomes.BASALT_DELTAS)));
+            netherBiomes = new Climate.ParameterList<>(points);
         } else {
             // addBiomes is made public by oreseer.accesswidener (same order as the overworld biome source)
-            new OverworldBiomeBuilder().addBiomes(pair -> keys.add(pair.getSecond()));
+            new OverworldBiomeBuilder().addBiomes(pair -> {
+                keys.add(pair.getSecond());
+                points.add(Pair.of(pair.getFirst(), biomeLookup.getOrThrow(pair.getSecond())));
+            });
+            overworldBiomes = new Climate.ParameterList<>(points);
         }
         List<Holder<Biome>> biomes = new ArrayList<>();
         for (ResourceKey<Biome> k : keys) biomes.add(biomeLookup.getOrThrow(k));
@@ -199,8 +217,12 @@ public final class OrePredictor {
         final List<Blob> out = new ArrayList<>();
         final EnumSet<OreType> wanted;
         final Level level;
+        final boolean nether;
+        final long seed;
 
-        Run(Ctx ctx, WorldgenRandom rnd, EnumSet<OreType> wanted, Level level) {
+        Run(boolean nether, long seed, Ctx ctx, WorldgenRandom rnd, EnumSet<OreType> wanted, Level level) {
+            this.nether = nether;
+            this.seed = seed;
             this.ctx = ctx;
             this.rnd = rnd;
             this.wanted = wanted;
@@ -213,7 +235,7 @@ public final class OrePredictor {
         Ctx ctx = ctx(isNether);
         WorldgenRandom rnd = new WorldgenRandom(new XoroshiroRandomSource(0L));
         long decoration = rnd.setDecorationSeed(seed, cx << 4, cz << 4);
-        Run run = new Run(ctx, rnd, wanted, level);
+        Run run = new Run(isNether, seed, ctx, rnd, wanted, level);
         for (Gen g : ctx.gens()) {
             if (!(wanted.contains(g.stone()) || wanted.contains(g.deep()))) continue;
             rnd.setFeatureSeed(decoration, g.index(), g.step());
@@ -246,13 +268,21 @@ public final class OrePredictor {
                 if (r.nextFloat() < 1.0F / (float) ra.chance()) apply(g, mi + 1, x, y, z, run);
             }
             case BiomeCheck ignored -> {
-                if (biomeAllows(g, x, y, z, run.level)) apply(g, mi + 1, x, y, z, run);
+                if (biomeAllows(g, x, y, z, run)) apply(g, mi + 1, x, y, z, run);
             }
         }
     }
 
-    private static boolean biomeAllows(Gen g, int x, int y, int z, Level level) {
+    private static boolean biomeAllows(Gen g, int x, int y, int z, Run run) {
         if (g.universal()) return true;
+        try {
+            // the real biome at this spot, computed from the seed (same noise vanilla uses)
+            Holder<Biome> h = biomeAt(run.nether, run.seed, x, y, z);
+            return h.value().getGenerationSettings().hasFeature(g.feature());
+        } catch (Throwable ignored) {
+            // fall back to what the client has loaded
+        }
+        Level level = run.level;
         try {
             if (level == null || !level.hasChunk(x >> 4, z >> 4)) return false;
             Optional<ResourceKey<Biome>> key = level.getBiome(new BlockPos(x, y, z)).unwrapKey();
@@ -262,6 +292,23 @@ public final class OrePredictor {
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    private static Holder<Biome> biomeAt(boolean isNether, long seed, int x, int y, int z) {
+        String key = (isNether ? "n" : "o") + seed;
+        Climate.Sampler sampler;
+        synchronized (SAMPLERS) {
+            sampler = SAMPLERS.get(key);
+            if (sampler == null) {
+                SAMPLERS.clear();
+                RandomState rs = RandomState.create(lookup,
+                        isNether ? NoiseGeneratorSettings.NETHER : NoiseGeneratorSettings.OVERWORLD, seed);
+                sampler = rs.sampler();
+                SAMPLERS.put(key, sampler);
+            }
+        }
+        Climate.ParameterList<Holder<Biome>> list = isNether ? netherBiomes : overworldBiomes;
+        return list.findValue(sampler.sample(x >> 2, y >> 2, z >> 2));
     }
 
     // ---- height providers (mirrors the vanilla classes, anchors resolved per dimension) ----

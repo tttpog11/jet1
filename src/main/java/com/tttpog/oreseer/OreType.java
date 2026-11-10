@@ -11,6 +11,7 @@ public enum OreType {
     DIAMOND("diamond", "Diamond", "diamond_ore", Group.OVERWORLD, 0xFF4DFFEA),
     EMERALD("emerald", "Emerald", "emerald_ore", Group.OVERWORLD, 0xFF22E86A),
 
+    D_COAL("deepslate_coal", "Deepslate Coal", "deepslate_coal_ore", Group.DEEPSLATE, 0xFFB0B0B0),
     D_IRON("deepslate_iron", "Deepslate Iron", "deepslate_iron_ore", Group.DEEPSLATE, 0xFFE8C9AE),
     D_COPPER("deepslate_copper", "Deepslate Copper", "deepslate_copper_ore", Group.DEEPSLATE, 0xFFFF8A5C),
     D_GOLD("deepslate_gold", "Deepslate Gold", "deepslate_gold_ore", Group.DEEPSLATE, 0xFFFFE94D),
