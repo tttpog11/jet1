@@ -34,6 +34,7 @@ public final class OreConfig {
     public boolean markerDistance = true;
     public int markerMaxDist = 128;
     public int markerSize = 5;
+    public boolean hideMissing = false; // hide veins whose loaded blocks are air (mined / caves)
 
     // Ore List module
     public boolean listEnabled = true;

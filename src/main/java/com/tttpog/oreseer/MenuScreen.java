@@ -265,6 +265,7 @@ public class MenuScreen extends Screen {
             case DEEPSLATE -> addOreRows(rows, OreType.Group.DEEPSLATE);
             case NETHER -> addOreRows(rows, OreType.Group.NETHER);
             case MARKERS -> {
+                rows.add(new ToggleRow("Hide mined / air", () -> c.hideMissing, () -> c.hideMissing = !c.hideMissing));
                 rows.add(new ToggleRow("Show distance", () -> c.markerDistance, () -> c.markerDistance = !c.markerDistance));
                 rows.add(new StepRow("Max distance", () -> c.markerMaxDist, v -> c.markerMaxDist = v, 32, 512, 16));
                 rows.add(new StepRow("Marker size", () -> c.markerSize, v -> c.markerSize = v, 3, 12, 1));

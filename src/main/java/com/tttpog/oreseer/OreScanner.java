@@ -131,7 +131,7 @@ public final class OreScanner {
                 if (!wanted.contains(b.type())) continue;
                 if (b.y() < c.minY || b.y() > c.maxY) continue;
                 double dx = b.x() - eye.x, dy = b.y() - eye.y, dz = b.z() - eye.z;
-                if (dx * dx + dy * dy + dz * dz <= max2 && looksReal(level, b)) all.add(b);
+                if (dx * dx + dy * dy + dz * dz <= max2 && (!c.hideMissing || looksReal(level, b))) all.add(b);
             }
         }
         all.sort(Comparator.comparingDouble(b -> {
