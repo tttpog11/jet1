@@ -15,6 +15,10 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 neoForge {
     version = neo_version
 
+    neoFormRuntime {
+        version = '1.0.42'
+    }
+
     runs {
         client {
             client()
