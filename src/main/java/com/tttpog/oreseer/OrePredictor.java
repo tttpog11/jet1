@@ -109,13 +109,8 @@ public final class OrePredictor {
             keys.add(Biomes.WARPED_FOREST);
             keys.add(Biomes.BASALT_DELTAS);
         } else {
-            // addBiomes is protected, so call it reflectively (same order as the overworld biome source)
-            java.lang.reflect.Method add = OverworldBiomeBuilder.class
-                    .getDeclaredMethod("addBiomes", java.util.function.Consumer.class);
-            add.setAccessible(true);
-            java.util.function.Consumer<com.mojang.datafixers.util.Pair<?, ResourceKey<Biome>>> sink =
-                    pair -> keys.add(pair.getSecond());
-            add.invoke(new OverworldBiomeBuilder(), sink);
+            // addBiomes is made public by oreseer.accesswidener (same order as the overworld biome source)
+            new OverworldBiomeBuilder().addBiomes(pair -> keys.add(pair.getSecond()));
         }
         List<Holder<Biome>> biomes = new ArrayList<>();
         for (ResourceKey<Biome> k : keys) biomes.add(biomeLookup.getOrThrow(k));
