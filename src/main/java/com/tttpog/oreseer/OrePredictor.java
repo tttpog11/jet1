@@ -16,7 +16,7 @@ import net.minecraft.util.valueproviders.IntProvider;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.FeatureSorter;
-import net.minecraft.world.level.biome.OverworldBiomeBuilder;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList;
 import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
@@ -86,11 +86,10 @@ public final class OrePredictor {
 
             // Same biome order as the overworld MultiNoiseBiomeSource.
             LinkedHashSet<ResourceKey<Biome>> keys = new LinkedHashSet<>();
-            new OverworldBiomeBuilder() {
-                {
-                    addBiomes(pair -> keys.add(pair.getSecond())); // protected: call from subclass
-                }
-            };
+            MultiNoiseBiomeSourceParameterList.Preset.OVERWORLD.provider()
+                    .<ResourceKey<Biome>>apply(k -> k)
+                    .values()
+                    .forEach(pair -> keys.add(pair.getSecond()));
             List<Holder<Biome>> biomes = new ArrayList<>();
             for (ResourceKey<Biome> k : keys) biomes.add(biomeLookup.getOrThrow(k));
 
