@@ -26,7 +26,8 @@ public class MenuScreen extends Screen {
 
     private enum Module {
         FINDER("Finder"), OVERWORLD("Overworld Ores"), DEEPSLATE("Deepslate Ores"), NETHER("Nether Ores"),
-        MARKERS("Markers"), LIST("Ore List");
+        MARKERS("Markers"), LIST("Ore List"),
+        SOUND("Sound Cards");
 
         final String label;
 
@@ -35,8 +36,24 @@ public class MenuScreen extends Screen {
         }
     }
 
+    private enum Category {
+        ORE("Ore Predictor", "Find ores from your world seed:", "overworld, deepslate and nether.",
+                Module.FINDER, Module.OVERWORLD, Module.DEEPSLATE, Module.NETHER, Module.MARKERS, Module.LIST),
+        SOUND("Sound Info", "Cards for nearby sounds: which", "block or mob made them.", Module.SOUND);
+
+        final String label, line1, line2;
+        final Module[] modules;
+
+        Category(String label, String line1, String line2, Module... modules) {
+            this.label = label;
+            this.line1 = line1;
+            this.line2 = line2;
+            this.modules = modules;
+        }
+    }
+
     // categories: the sidebar first lists categories, opening one shows its modules
-    private static boolean inCategory = false;
+    private static Category openCat = null;
     private Module selected = Module.FINDER;
     private EditBox seedBox;
     private int px, py, ps;
@@ -65,7 +82,7 @@ public class MenuScreen extends Screen {
                 // incomplete input like "-" is fine, keep the old seed
             }
         });
-        seedBox.visible = inCategory && selected == Module.FINDER;
+        seedBox.visible = openCat != null && selected == Module.FINDER;
         addRenderableWidget(seedBox);
     }
 
@@ -252,7 +269,7 @@ public class MenuScreen extends Screen {
     private List<Row> rows() {
         OreConfig c = OreConfig.get();
         List<Row> rows = new ArrayList<>();
-        if (!inCategory) return rows;
+        if (openCat == null) return rows;
         switch (selected) {
             case FINDER -> {
                 rows.add(new LabelRow("World seed"));
@@ -269,6 +286,14 @@ public class MenuScreen extends Screen {
                 rows.add(new ToggleRow("Show distance", () -> c.markerDistance, () -> c.markerDistance = !c.markerDistance));
                 rows.add(new StepRow("Max distance", () -> c.markerMaxDist, v -> c.markerMaxDist = v, 32, 512, 16));
                 rows.add(new StepRow("Marker size", () -> c.markerSize, v -> c.markerSize = v, 3, 12, 1));
+            }
+            case SOUND -> {
+                rows.add(new ToggleRow("Block sounds", () -> c.soundBlocks, () -> c.soundBlocks = !c.soundBlocks));
+                rows.add(new ToggleRow("Mob / player sounds", () -> c.soundEntities, () -> c.soundEntities = !c.soundEntities));
+                rows.add(new ToggleRow("Block icons", () -> c.soundIcons, () -> c.soundIcons = !c.soundIcons));
+                rows.add(new StepRow("Max cards", () -> c.soundMaxCards, v -> c.soundMaxCards = v, 1, 8, 1));
+                rows.add(new StepRow("Max distance", () -> c.soundMaxDist, v -> c.soundMaxDist = v, 4, 96, 4));
+                rows.add(new StepRow("Show for (sec)", () -> c.soundSeconds, v -> c.soundSeconds = v, 2, 12, 1));
             }
             case LIST -> rows.add(new StepRow("Entries", () -> c.listSize, v -> c.listSize = v, 3, 15, 1));
         }
@@ -305,6 +330,7 @@ public class MenuScreen extends Screen {
             case NETHER -> c.netherEnabled;
             case MARKERS -> c.markersEnabled;
             case LIST -> c.listEnabled;
+            case SOUND -> c.soundEnabled;
         };
     }
 
@@ -317,6 +343,7 @@ public class MenuScreen extends Screen {
             case NETHER -> c.netherEnabled = !c.netherEnabled;
             case MARKERS -> c.markersEnabled = !c.markersEnabled;
             case LIST -> c.listEnabled = !c.listEnabled;
+            case SOUND -> c.soundEnabled = !c.soundEnabled;
         }
     }
 
@@ -377,7 +404,7 @@ public class MenuScreen extends Screen {
             }
         }
 
-        drawSaturn(g, px + SIDE_W / 2, py + (48 + 6 * 21 + ps - 24) / 2 + 2);
+        drawSaturn(g, px + SIDE_W / 2, py + (48 + (openCat == null ? 2 : openCat.modules.length) * 21 + ps - 24) / 2 + 2);
 
         // borders with a faint outer glow
         g.fill(px - 1, py - 1, px + ps + 1, py, 0x55B58CFF);
@@ -437,27 +464,34 @@ public class MenuScreen extends Screen {
         g.drawString(font, "OreSeer", px + 8, py + 9, 0xFFE6D6FF);
 
         // modules
-        if (!inCategory) {
+        if (openCat == null) {
             // category list
-            int bx = px + 6, by = py + 26, bw = SIDE_W - 12, bh = 24;
-            boolean hover = in(mouseX, mouseY, bx, by, bw, bh);
-            g.fillGradient(bx, by, bx + bw, by + bh, hover ? 0xE0B07CFF : 0xC09B5CFF, hover ? 0xE06A3DD0 : 0xC05A2FB8);
-            g.drawString(font, "Ore Predictor", bx + 8, by + 8, C_TEXT);
-            g.drawString(font, ">", bx + bw - 12, by + 8, C_TEXT);
+            Category[] cats = Category.values();
+            for (int i = 0; i < cats.length; i++) {
+                int bx = px + 6, by = py + 26 + i * 28, bw = SIDE_W - 12, bh = 24;
+                boolean hover = in(mouseX, mouseY, bx, by, bw, bh);
+                g.fillGradient(bx, by, bx + bw, by + bh, hover ? 0xE0B07CFF : 0xC09B5CFF, hover ? 0xE06A3DD0 : 0xC05A2FB8);
+                g.drawString(font, cats[i].label, bx + 8, by + 8, C_TEXT);
+                g.drawString(font, ">", bx + bw - 12, by + 8, C_TEXT);
+            }
             g.drawString(font, "Categories", px + 8, py + ps - 13, C_DIM);
 
             g.drawString(font, "Categories", mainX(), py + 9, C_TEXT);
-            g.drawString(font, "Ore Predictor", mainX(), py + 34, 0xFFE6D6FF);
-            g.drawString(font, "Find ores from your world seed:", mainX(), py + 48, C_DIM);
-            g.drawString(font, "overworld, deepslate and nether.", mainX(), py + 59, C_DIM);
-            g.drawString(font, "Click it on the left to open.", mainX(), py + 78, C_DIM);
+            int ty = py + 34;
+            for (Category cat : cats) {
+                g.drawString(font, cat.label, mainX(), ty, 0xFFE6D6FF);
+                g.drawString(font, cat.line1, mainX(), ty + 12, C_DIM);
+                g.drawString(font, cat.line2, mainX(), ty + 23, C_DIM);
+                ty += 42;
+            }
+            g.drawString(font, "Click one on the left to open.", mainX(), ty + 4, C_DIM);
         } else {
             int bx = px + 6, by = py + 24, bw = SIDE_W - 12, bh = 18;
             boolean hover = in(mouseX, mouseY, bx, by, bw, bh);
             g.fill(bx, by, bx + bw, by + bh, hover ? 0xA0402A80 : 0x7018104A);
-            g.drawString(font, "< Ore Predictor", bx + 6, by + 5, 0xFFE6D6FF);
+            g.drawString(font, "< " + openCat.label, bx + 6, by + 5, 0xFFE6D6FF);
 
-            Module[] mods = Module.values();
+            Module[] mods = openCat.modules;
             for (int i = 0; i < mods.length; i++) {
                 Module m = mods[i];
                 int mx0 = px + 6, my0 = moduleY(i), mw = SIDE_W - 12, mh = 18;
@@ -474,14 +508,14 @@ public class MenuScreen extends Screen {
 
             g.drawString(font, selected.label + " settings", mainX(), py + 9, C_TEXT);
         }
-        seedBox.visible = inCategory && selected == Module.FINDER;
+        seedBox.visible = openCat != null && selected == Module.FINDER;
         int y = rowsTop();
         for (Row r : rows()) {
             r.draw(this, g, mainX(), y, mainW(), mouseX, mouseY);
             y += r.h;
         }
 
-        if (inCategory && selected == Module.FINDER) drawStatus(g);
+        if (openCat != null && selected == Module.FINDER) drawStatus(g);
 
         super.render(g, mouseX, mouseY, partialTick); // widgets (seed box) on top
     }
@@ -521,17 +555,23 @@ public class MenuScreen extends Screen {
         double my = event.y();
         int button = event.button();
 
-        if (!inCategory) {
-            if (in(mx, my, px + 6, py + 26, SIDE_W - 12, 24)) inCategory = true;
+        if (openCat == null) {
+            Category[] cats = Category.values();
+            for (int i = 0; i < cats.length; i++) {
+                if (in(mx, my, px + 6, py + 26 + i * 28, SIDE_W - 12, 24)) {
+                    openCat = cats[i];
+                    selected = openCat.modules[0];
+                }
+            }
             return true;
         }
         if (in(mx, my, px + 6, py + 24, SIDE_W - 12, 18)) {
-            inCategory = false;
+            openCat = null;
             seedBox.setFocused(false);
             return true;
         }
 
-        Module[] mods = Module.values();
+        Module[] mods = openCat.modules;
         for (int i = 0; i < mods.length; i++) {
             if (in(mx, my, px + 6, moduleY(i), SIDE_W - 12, 18)) {
                 if (button == 0) {

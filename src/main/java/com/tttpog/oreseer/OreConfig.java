@@ -36,6 +36,15 @@ public final class OreConfig {
     public int markerSize = 5;
     public boolean hideMissing = false; // hide veins whose loaded blocks are air (mined / caves)
 
+    // Sound Cards module
+    public boolean soundEnabled = true;
+    public boolean soundBlocks = true;
+    public boolean soundEntities = true;
+    public boolean soundIcons = true;
+    public int soundMaxCards = 5;
+    public int soundMaxDist = 32;
+    public int soundSeconds = 4;
+
     // Ore List module
     public boolean listEnabled = true;
     public int listSize = 8;
@@ -83,6 +92,9 @@ public final class OreConfig {
         markerMaxDist = Math.max(32, Math.min(512, markerMaxDist));
         markerSize = Math.max(3, Math.min(12, markerSize));
         listSize = Math.max(3, Math.min(15, listSize));
+        soundMaxCards = Math.max(1, Math.min(8, soundMaxCards));
+        soundMaxDist = Math.max(4, Math.min(96, soundMaxDist));
+        soundSeconds = Math.max(2, Math.min(12, soundSeconds));
     }
 
     public boolean groupEnabled(OreType.Group g) {

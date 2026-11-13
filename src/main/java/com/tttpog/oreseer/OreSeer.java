@@ -24,12 +24,15 @@ public class OreSeer implements ClientModInitializer {
             while (menuKey.consumeClick()) {
                 if (client.screen == null) client.setScreen(new MenuScreen());
             }
+            SoundCards.tryRegister(client);
+            SoundCards.tick(client);
             OreScanner.tick(client);
         });
 
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MODID, "hud"), (graphics, delta) -> {
             Minecraft mc = Minecraft.getInstance();
             OreHud.render(graphics, mc, delta.getGameTimeDeltaPartialTick(true));
+            SoundCards.render(graphics, mc);
         });
     }
 }
