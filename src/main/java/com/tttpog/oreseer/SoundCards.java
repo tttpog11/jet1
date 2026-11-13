@@ -60,7 +60,7 @@ public final class SoundCards {
             String source = s.getSource().name();
             if (source.equals("MASTER") || source.equals("MUSIC") || source.equals("RECORDS")
                     || source.equals("VOICE")) return;
-            QUEUE.add(new Raw(s.getLocation().getPath(), source, s.getX(), s.getY(), s.getZ()));
+            QUEUE.add(new Raw(s.getIdentifier().getPath(), source, s.getX(), s.getY(), s.getZ()));
             while (QUEUE.size() > 64) QUEUE.poll();
         } catch (Throwable ignored) {
             // never let a bad sound break playback
