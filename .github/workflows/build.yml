@@ -33,11 +33,11 @@ jobs:
           find / -name 'fabric-rendering-v1*.jar' 2>/dev/null | head -3 > mcsrc/fabric-jars.txt
           for f in $(cat mcsrc/fabric-jars.txt); do unzip -l "$f" | grep -i -E "WorldRender|Sky|HudElement" >> mcsrc/fabric-classes.txt; done
           du -sh mcsrc
-          echo "=====SKYFILES"; cat mcsrc/sky-files.txt
-          for f in $(grep -E "renderer/SkyRenderer.java|renderer/state/SkyRenderState.java" mcsrc/sky-files.txt); do echo "=====FILE $f"; cat "$f"; done
-          echo "=====FABRIC"; cat mcsrc/fabric-classes.txt 2>/dev/null | head -40
-          echo "=====PIPELINES"; grep -n "SKY\|END_SKY\|POSITION_TEX" /tmp/src/net/minecraft/client/renderer/RenderPipelines.java | head -30
-          echo "=====LEVELRENDERER-SKY"; grep -n -i "sky" /tmp/src/net/minecraft/client/renderer/LevelRenderer.java | head -60
+          echo "=====PIPES"; sed -n 560,660p /tmp/src/net/minecraft/client/renderer/RenderPipelines.java
+          echo "=====GPUDEVICE"; grep -n "createBuffer" /tmp/src/com/mojang/blaze3d/systems/GpuDevice.java
+          echo "=====ATEXTURE"; grep -n "public" /tmp/src/net/minecraft/client/renderer/texture/AbstractTexture.java
+          echo "=====TEXMGR"; grep -n "getTexture" /tmp/src/net/minecraft/client/renderer/texture/TextureManager.java
+          echo "=====DIMTYPE"; grep -n "Skybox" /tmp/src/net/minecraft/world/level/dimension/DimensionType.java | head
           echo "=====END"
 
       - uses: actions/upload-artifact@v4
