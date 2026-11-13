@@ -27,7 +27,7 @@ public class MenuScreen extends Screen {
     private enum Module {
         FINDER("Finder"), OVERWORLD("Overworld Ores"), DEEPSLATE("Deepslate Ores"), NETHER("Nether Ores"),
         MARKERS("Markers"), LIST("Ore List"),
-        SOUND("Sound Cards");
+        SOUND("Sound Cards"), SKYBOX("Skybox");
 
         final String label;
 
@@ -39,7 +39,8 @@ public class MenuScreen extends Screen {
     private enum Category {
         ORE("Ore Predictor", "Find ores from your world seed:", "overworld, deepslate and nether.",
                 Module.FINDER, Module.OVERWORLD, Module.DEEPSLATE, Module.NETHER, Module.MARKERS, Module.LIST),
-        SOUND("Sound Info", "Cards for nearby sounds: which", "block or mob made them.", Module.SOUND);
+        SOUND("Sound Info", "Cards for nearby sounds: which", "block or mob made them.", Module.SOUND),
+        SKY("Skybox", "Replace the night sky with your", "own pictures (Overworld only).", Module.SKYBOX);
 
         final String label, line1, line2;
         final Module[] modules;
@@ -206,6 +207,39 @@ public class MenuScreen extends Screen {
         }
     }
 
+    private static final class CycleRow extends Row {
+        final String label;
+        final IntSupplier get;
+        final IntConsumer set;
+        final String[] names;
+
+        CycleRow(String label, IntSupplier get, IntConsumer set, String[] names) {
+            super(18);
+            this.label = label;
+            this.get = get;
+            this.set = set;
+            this.names = names;
+        }
+
+        @Override
+        void draw(MenuScreen s, GuiGraphics g, int x, int y, int w, int mx, int my) {
+            g.drawString(s.font, label, x, y + 5, C_TEXT);
+            String v = names[Math.floorMod(get.getAsInt(), names.length)];
+            int bw = s.font.width(v) + 12;
+            int bx = x + w - bw;
+            g.fill(bx, y + 1, bx + bw, y + 15, in(mx, my, bx, y + 1, bw, 14) ? 0xAAFFFFFF : 0x66000020);
+            g.drawString(s.font, v, bx + 6, y + 4, C_TEXT);
+        }
+
+        @Override
+        boolean click(int x, int y, int w, double mx, double my, int button) {
+            if (button != 0 && button != 1) return false;
+            int d = button == 0 ? 1 : -1;
+            set.accept(Math.floorMod(get.getAsInt() + d, names.length));
+            return true;
+        }
+    }
+
     private static final class ToggleRow extends Row {
         final String label;
         final BooleanSupplier get;
@@ -287,6 +321,14 @@ public class MenuScreen extends Screen {
                 rows.add(new StepRow("Max distance", () -> c.markerMaxDist, v -> c.markerMaxDist = v, 32, 512, 16));
                 rows.add(new StepRow("Marker size", () -> c.markerSize, v -> c.markerSize = v, 3, 12, 1));
             }
+            case SKYBOX -> {
+                rows.add(new LabelRow("Overworld only"));
+                rows.add(new CycleRow("Sky", () -> c.skyChoice, v -> c.skyChoice = v,
+                        new String[]{"Milky Way arch", "Milky Way pillars"}));
+                rows.add(new StepRow("Brightness %", () -> c.skyBrightness, v -> c.skyBrightness = v, 20, 300, 10));
+                rows.add(new ToggleRow("Rotate with time", () -> c.skyRotate, () -> c.skyRotate = !c.skyRotate));
+                rows.add(new ToggleRow("Show in daytime", () -> c.skyDay, () -> c.skyDay = !c.skyDay));
+            }
             case SOUND -> {
                 rows.add(new ToggleRow("Block sounds", () -> c.soundBlocks, () -> c.soundBlocks = !c.soundBlocks));
                 rows.add(new ToggleRow("Mob / player sounds", () -> c.soundEntities, () -> c.soundEntities = !c.soundEntities));
@@ -331,6 +373,7 @@ public class MenuScreen extends Screen {
             case MARKERS -> c.markersEnabled;
             case LIST -> c.listEnabled;
             case SOUND -> c.soundEnabled;
+            case SKYBOX -> c.skyEnabled;
         };
     }
 
@@ -344,6 +387,7 @@ public class MenuScreen extends Screen {
             case MARKERS -> c.markersEnabled = !c.markersEnabled;
             case LIST -> c.listEnabled = !c.listEnabled;
             case SOUND -> c.soundEnabled = !c.soundEnabled;
+            case SKYBOX -> c.skyEnabled = !c.skyEnabled;
         }
     }
 

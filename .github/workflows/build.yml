@@ -19,34 +19,6 @@ jobs:
         with:
           gradle-version: current
 
-      - name: Inspect Minecraft sources (temporary)
-        continue-on-error: true
-        run: |
-          gradle genSources --no-daemon > gen.log 2>&1 || tail -40 gen.log
-          J=$(find / -name '*sources.jar' -path '*minecraft*' 2>/dev/null | grep -v -i fabric-api | head -3)
-          echo "sources jars: $J"
-          mkdir -p /tmp/src
-          for j in $J; do unzip -q -o "$j" -d /tmp/src || true; done
-          mkdir -p mcsrc/renderer
-          cp -r /tmp/src/net/minecraft/client/renderer/* mcsrc/renderer/ 2>/dev/null || true
-          find /tmp/src -iname '*Sky*' > mcsrc/sky-files.txt
-          find / -name 'fabric-rendering-v1*.jar' 2>/dev/null | head -3 > mcsrc/fabric-jars.txt
-          for f in $(cat mcsrc/fabric-jars.txt); do unzip -l "$f" | grep -i -E "WorldRender|Sky|HudElement" >> mcsrc/fabric-classes.txt; done
-          du -sh mcsrc
-          echo "=====PIPES"; sed -n 560,660p /tmp/src/net/minecraft/client/renderer/RenderPipelines.java
-          echo "=====GPUDEVICE"; grep -n "createBuffer" /tmp/src/com/mojang/blaze3d/systems/GpuDevice.java
-          echo "=====ATEXTURE"; grep -n "public" /tmp/src/net/minecraft/client/renderer/texture/AbstractTexture.java
-          echo "=====TEXMGR"; grep -n "getTexture" /tmp/src/net/minecraft/client/renderer/texture/TextureManager.java
-          echo "=====DIMTYPE"; grep -n "Skybox" /tmp/src/net/minecraft/world/level/dimension/DimensionType.java | head
-          echo "=====END"
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mcsrc
-          path: mcsrc
-          if-no-files-found: ignore
-
       - name: Build
         run: |
           set +e

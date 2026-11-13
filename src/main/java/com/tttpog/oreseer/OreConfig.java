@@ -45,6 +45,13 @@ public final class OreConfig {
     public int soundMaxDist = 32;
     public int soundSeconds = 4;
 
+    // Skybox module (Overworld only)
+    public boolean skyEnabled = false;
+    public int skyChoice = 0;        // 0 = Milky Way arch, 1 = Milky Way pillars
+    public int skyBrightness = 100;  // percent
+    public boolean skyDay = false;   // also show in daylight
+    public boolean skyRotate = true; // turn with the night sky
+
     // Ore List module
     public boolean listEnabled = true;
     public int listSize = 8;
@@ -92,6 +99,8 @@ public final class OreConfig {
         markerMaxDist = Math.max(32, Math.min(512, markerMaxDist));
         markerSize = Math.max(3, Math.min(12, markerSize));
         listSize = Math.max(3, Math.min(15, listSize));
+        skyChoice = Math.max(0, Math.min(1, skyChoice));
+        skyBrightness = Math.max(20, Math.min(300, skyBrightness));
         soundMaxCards = Math.max(1, Math.min(8, soundMaxCards));
         soundMaxDist = Math.max(4, Math.min(96, soundMaxDist));
         soundSeconds = Math.max(2, Math.min(12, soundSeconds));

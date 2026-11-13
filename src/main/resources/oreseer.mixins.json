@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.tttpog.oreseer.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "SkyRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

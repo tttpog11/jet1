@@ -8,6 +8,7 @@
   "license": "MIT",
   "environment": "client",
   "accessWidener": "oreseer.accesswidener",
+  "mixins": ["oreseer.mixins.json"],
   "entrypoints": {
     "client": ["com.tttpog.oreseer.OreSeer"]
   },
