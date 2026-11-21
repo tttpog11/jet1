@@ -1,0 +1,95 @@
+// Cassiopeia, an addon skill for The Shooting Star [Demo] (Fabric, Minecraft 1.21.11), built with Loom.
+//
+//   1. Put the RimuLib file you downloaded (rimulib-*.jar, the one with the per-version jars inside) in libs/.
+//   2. ./gradlew build   ->  build/libs/shooting_star_cassiopeia-<version>.jar
+//
+// The addon is compiled against RimuLib's public API only. It never touches The Shooting Star's own code, so that
+// mod's jar is NOT needed to build. RimuLib is compiled against and never shipped inside this jar (its licence is
+// All Rights Reserved). To try the addon, put it in a Fabric 1.21.11 instance next to Fabric API, RimuLib and
+// The Shooting Star [Demo].
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+}
+
+// RimuLib is published as one jar that holds a build for every Minecraft version (META-INF/jars/...+mc1.21.11.jar).
+// That nested build is what we compile against, so it is taken out into build/rimulib/. A jar that already is the
+// 1.21.11 build (or any plain Fabric mod jar) is used as it is.
+def rimulibJars = fileTree(dir: 'libs', include: '*rimulib*.jar').files
+if (rimulibJars.size() > 1) {
+    throw new GradleException("libs/ has more than one RimuLib: ${rimulibJars*.name} - keep one")
+}
+
+def nestedBuild = { File bundle, String suffix ->
+    def zip = new java.util.zip.ZipFile(bundle)
+    try {
+        // (the whole suffix: '+mc1.21.1.jar' must not pick the '+mc1.21.11.jar' build)
+        def entry = zip.entries().find { it.name.startsWith('META-INF/jars/') && it.name.endsWith(suffix + '.jar') }
+        if (entry == null) {
+            if (zip.getEntry('fabric.mod.json') != null && zip.getEntry('META-INF/jars/') == null) {
+                return bundle
+            }
+            throw new GradleException("${bundle.name} holds no ${suffix} build")
+        }
+        def out = layout.buildDirectory.dir('rimulib').get().file(entry.name.substring(entry.name.lastIndexOf('/') + 1)).asFile
+        if (!out.exists() || out.lastModified() < bundle.lastModified()) {
+            out.parentFile.mkdirs()
+            out.withOutputStream { it << zip.getInputStream(entry) }
+        }
+        return out
+    } finally {
+        zip.close()
+    }
+}
+
+def rimulibNow = rimulibJars.isEmpty() ? files() : files(nestedBuild(rimulibJars.first(), '+mc' + project.minecraft_version))
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // Loom remaps these from intermediary (the names Fabric mods ship in) while configuring.
+    modCompileOnly rimulibNow
+    modLocalRuntime rimulibNow
+}
+
+tasks.named('compileJava') {
+    def found = rimulibJars
+    doFirst {
+        if (found.isEmpty()) {
+            throw new GradleException("Put the RimuLib file (rimulib-*.jar) in libs/ first - see libs/README.txt")
+        }
+    }
+}
+
+// fabric.mod.json is filled in from gradle.properties.
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand version: project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+    it.options.encoding = 'UTF-8'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}

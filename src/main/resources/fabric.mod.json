@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "shooting_star_cassiopeia",
+  "version": "${version}",
+  "name": "Cassiopeia (a Shooting Star addon)",
+  "description": "An unofficial addon for The Shooting Star [Demo]. Adds SC-01 Cassiopeia to the Stellar Remote: the W of five bright stars is drawn on the ground in light, then the stars fall one by one, dimmest first, each leaving a crater and a glowing star core, and starlight veins brand the constellation into the land.",
+  "authors": [
+    "You"
+  ],
+  "license": "MIT",
+  "icon": "assets/shooting_star_cassiopeia/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.cassiopeia.CassiopeiaMod"
+    ],
+    "client": [
+      "dev.cassiopeia.client.CassiopeiaClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.17.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*",
+    "shooting_star_demo": "*",
+    "rimulib": ">=1.3.0"
+  }
+}
