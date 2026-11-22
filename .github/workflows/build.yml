@@ -17,7 +17,7 @@ jobs:
 
       - name: Check for the RimuLib jar
         run: |
-          if ! ls libs/rimulib*.jar >/dev/null 2>&1; then
+          if ! ls libs/*rimulib*.jar >/dev/null 2>&1; then
             echo "::error title=RimuLib jar missing::Upload rimulib-1.3.0-fabric.jar into the libs folder of this branch (repo should be private), then re-run."
             exit 1
           fi
