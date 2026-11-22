@@ -89,7 +89,6 @@ tasks.withType(JavaCompile).configureEach {
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+    // No toolchain block: Loom 1.18 itself needs Gradle to run on Java 25, and `options.release = 21` above already
+    // makes the jar Java-21 bytecode (what Minecraft 1.21.11 runs on).
 }
