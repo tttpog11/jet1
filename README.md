@@ -3,9 +3,10 @@
 Adds **SC-01 · Cassiopeia** to the Stellar Remote of *The Shooting Star [Demo]*, in the style of SS-04 Seven Stars.
 
 Aim at the ground and cast. The W of Cassiopeia is drawn on the land in light. Its five bright stars (Caph, Schedar,
-Gamma Cassiopeiae, Ruchbah, Segin) then fall one by one, dimmest first and Schedar last. Each crater is as wide as its
-star is bright and has a glowing star core standing in it. After the last star, veins of light run along the W and are
-branded into the land. The caster gets a seven-shot cutscene through RimuLib's film director (title card, skip key and
+Gamma Cassiopeiae, Ruchbah, Segin) then burst out of the ground one by one, dimmest first and Schedar last. Nothing
+falls from the sky: each star erupts as a pillar of light, leaves a crater as wide as it is bright with a glowing star
+core standing in it, and climbs up to hang in the sky, so the W ends up shining above its twin on the land. After the
+last star, veins of light run along the W and are branded into the land. The caster gets a seven-shot cutscene through RimuLib's film director (title card, skip key and
 the menu's Cutscenes switch all work). It has its own key (**Y**), menu card, cooldown, and power / damage / speed
 sliders.
 
@@ -55,8 +56,8 @@ server and every client.
 | `Plan.java` | where the stars land and how big each crater is; also the packet sent to nearby players |
 | `Strike.java` | the server side of one cast: damage, craters, veins |
 | `Crater.java` | digs one crater a few columns per tick, lines it and stands the core in it |
-| `client/Show.java` | the sky: the W in light, the falling stars, blasts (vanilla particles) |
-| `client/Film.java` | the caster's cutscene (shots, camera paths, impact shake) |
+| `client/Show.java` | the light show: the W in light, the ground swelling, eruptions, stars rising into the sky (vanilla particles) |
+| `client/Film.java` | the caster's cutscene (shots, camera paths, eruption shake) |
 | `assets/shooting_star_cassiopeia/lang/en_us.json` | menu name, description, key label |
 
 ## Status

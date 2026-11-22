@@ -69,7 +69,7 @@ final class Strike {
         }
         for (Strike strike : ACTIVE) {
             if (strike.caster.equals(player.getUUID())) {
-                SkillApi.deny(player, Component.literal(CassiopeiaSkill.INSTANCE.title() + ": the stars are already falling"));
+                SkillApi.deny(player, Component.literal(CassiopeiaSkill.INSTANCE.title() + ": the stars are already rising"));
                 return false;
             }
         }
@@ -122,7 +122,7 @@ final class Strike {
             int star = Plan.ORDER[k];
             if (!this.launched[k] && this.clock >= Timeline.launch(k)) {
                 this.launched[k] = true;
-                Sfx.play(this.level, this.plan.stars()[star].add(0.0, 30.0, 0.0), Sfx.LAUNCH, 6.0F, 0.5F);
+                Sfx.play(this.level, this.plan.stars()[star], Sfx.LAUNCH, 6.0F, 0.5F);
             }
             if (!this.hit[k] && this.clock >= Timeline.impact(k)) {
                 this.hit[k] = true;

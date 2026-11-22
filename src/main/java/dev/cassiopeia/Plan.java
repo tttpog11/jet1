@@ -31,7 +31,7 @@ public record Plan(int casterId, long seed, float power, float speed, float yaw,
     private static final double[] DEPTH = {0.10, -0.202, 0.067, -0.068, 0.10};
     /** Brightness relative to Schedar (from apparent magnitudes 2.27, 2.23, 2.47, 2.68, 3.37). */
     private static final double[] FLUX = {0.96, 1.00, 0.80, 0.66, 0.35};
-    /** The order the stars fall in: dimmest first, Schedar, the brightest, as the finale. */
+    /** The order the stars erupt in: dimmest first, Schedar, the brightest, as the finale. */
     public static final int[] ORDER = {4, 3, 2, 0, 1};
 
     /** The W's width in blocks at power 1. */
@@ -121,18 +121,31 @@ public record Plan(int casterId, long seed, float power, float speed, float yaw,
         return BASE_WIDTH * this.power;
     }
 
-    /** Where star {@code star} falls from: far up, and out toward the caster's back-right so it comes in on a slant. */
-    public Vec3 skyOrigin(int star) {
-        Vec3 slant = this.right().scale(0.5).add(this.forward().scale(-0.8)).normalize();
-        return this.stars[star].add(slant.scale(90.0)).add(0.0, 170.0, 0.0);
+    /** How high above its crater a risen star hangs. */
+    public double skyHeight() {
+        return 64.0 + 0.4 * this.width();
     }
 
-    /** Where the falling star {@code star} is, {@code s} (0..1) of the way down: it speeds up as it comes. */
-    public Vec3 head(int star, double s) {
-        Vec3 from = this.skyOrigin(star);
-        Vec3 to = this.stars[star];
-        double eased = s * s;
-        return from.add(to.subtract(from).scale(eased));
+    /** Where star {@code star} hangs once it has risen: straight above its crater, so the W reappears in the sky. */
+    public Vec3 sky(int star) {
+        return this.stars[star].add(0.0, this.skyHeight(), 0.0);
+    }
+
+    /** The middle of the W as it hangs in the sky. */
+    public Vec3 skyCentre() {
+        return this.centre().add(0.0, this.skyHeight(), 0.0);
+    }
+
+    /** Where the rising star {@code star} is, {@code s} (0..1) of the way up: quick off the ground, easing as it settles. */
+    public Vec3 rise(int star, double s) {
+        double left = 1.0 - Mth.clamp(s, 0.0, 1.0);
+        double eased = 1.0 - left * left * left;
+        return this.stars[star].add(0.0, this.skyHeight() * eased, 0.0);
+    }
+
+    /** The point {@code distance} blocks along the W as it hangs in the sky (the same path as {@link #along}). */
+    public Vec3 skyAlong(double distance) {
+        return this.along(distance).add(0.0, this.skyHeight(), 0.0);
     }
 
     /** The length of the W drawn from Caph through to Segin. */
